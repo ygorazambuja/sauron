@@ -1,0 +1,33 @@
+{
+	"name": "sauron",
+	"version": "1.0.0",
+	"description": "OpenAPI to TypeScript/Angular Converter - Generate TypeScript interfaces and Angular HTTP services from Swagger/OpenAPI specs",
+	"main": "src/index.ts",
+	"scripts": {
+		"start": "bun run src/index.ts",
+		"dev": "bun run src/index.ts",
+		"test": "bun test",
+		"test:watch": "bun test --watch",
+		"test:coverage": "bun test --coverage",
+		"build": "bun build --compile ./src/index.ts --outfile sauron",
+		"cli": "bun run ./bin.ts"
+	},
+	"keywords": [
+		"openapi",
+		"swagger",
+		"typescript",
+		"angular",
+		"http-client",
+		"api-client",
+		"code-generator"
+	],
+	"author": "Sauron Team",
+	"license": "MIT",
+	"devDependencies": {
+		"@types/bun": "^1.0.0",
+		"bun-types": "^1.0.0"
+	},
+	"dependencies": {
+		"zod": "^3.22.4"
+	}
+}
