@@ -3,6 +3,9 @@
 	"version": "1.0.0",
 	"description": "OpenAPI to TypeScript/Angular Converter - Generate TypeScript interfaces and Angular HTTP services from Swagger/OpenAPI specs",
 	"main": "src/index.ts",
+	"bin": {
+		"sauron": "./bin.ts"
+	},
 	"scripts": {
 		"start": "bun run src/index.ts",
 		"dev": "bun run src/index.ts",
