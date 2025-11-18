@@ -54,6 +54,7 @@ bun test --coverage
 ```
 
 O comando irá:
+
 1. Ler o arquivo OpenAPI/Swagger especificado
 2. Validar o schema OpenAPI
 3. **Por padrão**: Gerar apenas interfaces TypeScript (models)
@@ -73,10 +74,14 @@ O comando irá:
 ### Uso Programático
 
 ```typescript
-import { readJsonFile, verifySwaggerComposition, createModels } from './src/utils';
+import {
+  readJsonFile,
+  verifySwaggerComposition,
+  createModels,
+} from "./src/utils";
 
 // 1. Ler arquivo JSON
-const swaggerData = await readJsonFile('swagger.json');
+const swaggerData = await readJsonFile("swagger.json");
 
 // 2. Validar schema
 const validatedSchema = verifySwaggerComposition(swaggerData);
@@ -106,6 +111,7 @@ outputs/
 ## Exemplo de Saída
 
 **Schema OpenAPI:**
+
 ```json
 {
   "MesValorIndexadorDto": {
@@ -119,6 +125,7 @@ outputs/
 ```
 
 **Resultado TypeScript:**
+
 ```typescript
 export interface MesValorIndexadorDto {
   dominioMesID: number;
@@ -133,6 +140,7 @@ export interface MesValorIndexadorDto {
 Lê e faz parse de um arquivo JSON do sistema de arquivos.
 
 **Parâmetros:**
+
 - `filePath`: Caminho para o arquivo JSON
 
 **Retorna:** Conteúdo JSON parseado
@@ -142,6 +150,7 @@ Lê e faz parse de um arquivo JSON do sistema de arquivos.
 Valida dados OpenAPI/Swagger contra o schema esperado.
 
 **Parâmetros:**
+
 - `swaggerData`: Dados brutos do OpenAPI JSON
 
 **Retorna:** Schema validado e tipado
@@ -153,6 +162,7 @@ Valida dados OpenAPI/Swagger contra o schema esperado.
 Gera definições TypeScript a partir de schemas OpenAPI.
 
 **Parâmetros:**
+
 - `openApiSchema`: Schema OpenAPI validado
 
 **Retorna:** Array de strings com definições TypeScript
@@ -167,16 +177,16 @@ Gera definições TypeScript a partir de schemas OpenAPI.
 
 ### Tipos Suportados
 
-| OpenAPI | TypeScript |
-|---------|------------|
-| `string` | `string` |
-| `integer` | `number` |
-| `number` | `number` |
-| `boolean` | `boolean` |
-| `string` + `format: "date-time"` | `Date` |
-| `array` + `items` | `T[]` |
-| `enum: [1, 2, 3]` | `1 | 2 | 3` |
-| `$ref: "#/components/schemas/Model"` | `Model` |
+| OpenAPI                              | TypeScript |
+| ------------------------------------ | ---------- | --- | --- |
+| `string`                             | `string`   |
+| `integer`                            | `number`   |
+| `number`                             | `number`   |
+| `boolean`                            | `boolean`  |
+| `string` + `format: "date-time"`     | `Date`     |
+| `array` + `items`                    | `T[]`      |
+| `enum: [1, 2, 3]`                    | `1         | 2   | 3`  |
+| `$ref: "#/components/schemas/Model"` | `Model`    |
 
 ## Desenvolvimento
 
@@ -278,30 +288,34 @@ Gera models + cliente fetch-based em `outputs/http-client/sauron-api.client.ts`.
 
 ```typescript
 // Exemplo de uso
-import { SauronApiClient } from './outputs/http-client/sauron-api.client';
-import type { LaboratorioDto, LaboratorioDtoResultPaginateFilterDto } from './outputs/models';
+import { SauronApiClient } from "./outputs/http-client/sauron-api.client";
+import type {
+  LaboratorioDto,
+  LaboratorioDtoResultPaginateFilterDto,
+} from "./outputs/models";
 
 // Criar instância com base URL
-const api = new SauronApiClient('https://api.exemplo.com');
+const api = new SauronApiClient("https://api.exemplo.com");
 
 // Usar métodos assíncronos com tipos específicos
 try {
-  const laboratorios: LaboratorioDtoResultPaginateFilterDto = await api.GetLaboratorioWithParams('search', 1, 10);
-  console.log('Resultados:', laboratorios);
+  const laboratorios: LaboratorioDtoResultPaginateFilterDto =
+    await api.GetLaboratorioWithParams("search", 1, 10);
+  console.log("Resultados:", laboratorios);
 
   const laboratorio: LaboratorioDto = await api.GetLaboratorioById(123);
-  console.log('Laboratório específico:', laboratorio);
+  console.log("Laboratório específico:", laboratorio);
 } catch (error) {
-  console.error('Erro na API:', error);
+  console.error("Erro na API:", error);
 }
 ```
 
 Ou usar a instância padrão:
 
 ```typescript
-import { sauronApi } from './outputs/http-client/sauron-api.client';
+import { sauronApi } from "./outputs/http-client/sauron-api.client";
 
-const result = await sauronApi.GetLaboratorioWithParams('search', 1, 10);
+const result = await sauronApi.GetLaboratorioWithParams("search", 1, 10);
 ```
 
 ### Serviço Angular
@@ -413,6 +427,3 @@ sauron --input swagger.json --angular
 ## Licença
 
 Este projeto é parte do sistema Sauron para conversão de APIs.
-# sauron
-# sauron
-# sauron
