@@ -11,5 +11,5 @@ const scriptPath = join(__dirname, "src", "index.ts");
 
 execSync(`bun run "${scriptPath}" ${process.argv.slice(2).join(" ")}`, {
   stdio: "inherit",
-  cwd: __dirname,
+  cwd: process.cwd(),
 });
