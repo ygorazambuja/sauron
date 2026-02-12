@@ -26,7 +26,7 @@ interface CliOptions {
 	help: boolean;
 }
 
-interface SauronConfig {
+export interface SauronConfig {
 	input?: string;
 	url?: string;
 	angular?: boolean;
@@ -195,13 +195,7 @@ async function initConfigFile(configFilePath = DEFAULT_CONFIG_FILE): Promise<voi
 	const angularProjectDetected = isAngularProject();
 	const defaultOutput = angularProjectDetected ? "src/app/sauron" : "outputs";
 
-	const template = `type SauronConfig = {
-  input?: string;
-  url?: string;
-  output?: string;
-  angular?: boolean;
-  http?: boolean;
-};
+	const template = `import type { SauronConfig } from "sauron";
 
 export default {
   // Use either "input" or "url". If both are set, "url" takes precedence.

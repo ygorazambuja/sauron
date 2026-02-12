@@ -231,6 +231,7 @@ describe("OpenAPI to TypeScript Converter CLI", () => {
 			const content = readFileSync("sauron.config.ts", "utf-8");
 			expect(content).toContain("export default");
 			expect(content).toContain("input");
+			expect(content).toContain('import type { SauronConfig } from "sauron"');
 			expect(content).toContain("satisfies SauronConfig");
 		});
 

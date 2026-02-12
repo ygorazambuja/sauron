@@ -81,13 +81,7 @@ O comando irá:
 Você pode centralizar as opções do CLI em um arquivo:
 
 ```ts
-type SauronConfig = {
-  input?: string;
-  url?: string;
-  output?: string;
-  angular?: boolean;
-  http?: boolean;
-};
+import type { SauronConfig } from "sauron";
 
 export default {
   input: "swagger.json",
