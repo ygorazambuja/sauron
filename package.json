@@ -35,6 +35,8 @@
     "bun-types": "^1.0.0"
   },
   "dependencies": {
+    "prettier": "^3.8.1",
+    "query-string": "^9.3.1",
     "zod": "^3.22.4"
   }
 }

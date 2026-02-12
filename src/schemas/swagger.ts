@@ -15,17 +15,19 @@ const ResponseSchema = z
 
 /**
  * Representa o Operation Object (OpenAPI 3.0), como 'get', 'post', etc.
- * Foca em 'responses' que é obrigatório.
+ * Foca em 'responses' (opcional para tolerar specs incompletos).
  */
 const HttpMethodSchema = z
 	.object({
 		tags: z.array(z.string()).optional(),
-		responses: z.record(
+		responses: z
+			.record(
 			z
 				.string()
 				.regex(/^(\d{3}|default)$/), // Chave é o código de status HTTP (ex: "200") ou "default" para Swagger 2.0
 			ResponseSchema,
-		),
+		)
+			.optional(),
 		// Campos como 'parameters' e 'requestBody' seriam opcionais aqui
 	})
 	.passthrough();

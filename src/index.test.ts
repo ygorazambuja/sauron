@@ -3,13 +3,14 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test, mock, spyOn } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync, existsSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 // Import functions from index.ts
 import {
 	parseArgs,
+	parseCommand,
 	isAngularProject,
 	getOutputPaths,
 	generateAngularService,
@@ -18,11 +19,15 @@ import {
 	extractResponseType,
 	createFetchHttpMethods,
 	generateFetchService,
+	initConfigFile,
+	loadSauronConfig,
+	mergeOptionsWithConfig,
 } from "./index";
 
 import {
 	createAngularHttpClientMethods,
 	createModels,
+	createModelsWithOperationTypes,
 	verifySwaggerComposition,
 } from "./utils";
 
@@ -182,6 +187,106 @@ describe("OpenAPI to TypeScript Converter CLI", () => {
 			expect(result.input).toBe("extra.json"); // Last JSON file takes precedence
 			expect(result.angular).toBe(true);
 		});
+
+		test("should parse config flag", () => {
+			Bun.argv = ["bun", "index.js", "--config", "./custom.config.ts"];
+
+			const result = parseArgs();
+
+			expect(result.config).toBe("./custom.config.ts");
+		});
+
+		test("should ignore init command when resolving positional input", () => {
+			Bun.argv = ["bun", "index.js", "init", "api.json"];
+
+			const result = parseArgs();
+
+			expect(result.input).toBe("api.json");
+		});
+	});
+
+	describe("parseCommand", () => {
+		test("should return init when first positional argument is init", () => {
+			Bun.argv = ["bun", "index.js", "init"];
+
+			const result = parseCommand();
+
+			expect(result).toBe("init");
+		});
+
+		test("should return generate when no command is provided", () => {
+			Bun.argv = ["bun", "index.js", "--http"];
+
+			const result = parseCommand();
+
+			expect(result).toBe("generate");
+		});
+	});
+
+	describe("config file", () => {
+		test("should create sauron.config.ts with initConfigFile", async () => {
+			await initConfigFile();
+
+			expect(existsSync("sauron.config.ts")).toBe(true);
+			const content = readFileSync("sauron.config.ts", "utf-8");
+			expect(content).toContain("export default");
+			expect(content).toContain("input");
+		});
+
+		test("should set angular true in config when Angular project is detected", async () => {
+			writeFileSync("angular.json", "{}");
+
+			await initConfigFile();
+
+			const content = readFileSync("sauron.config.ts", "utf-8");
+			expect(content).toContain("angular: true");
+			expect(content).toContain('output: "src/app/sauron"');
+		});
+
+		test("should load config from file", async () => {
+			writeFileSync(
+				"sauron.config.ts",
+				`export default { input: "api.json", http: true, output: "dist" };`,
+			);
+
+			const config = await loadSauronConfig();
+
+			expect(config).toEqual({
+				input: "api.json",
+				http: true,
+				output: "dist",
+			});
+		});
+
+		test("should merge CLI options over config options", () => {
+			const cliOptions = {
+				input: "swagger.json",
+				angular: true,
+				http: false,
+				help: false,
+				output: "cli-output",
+			};
+
+			const config = {
+				input: "config.json",
+				url: "https://example.com/openapi.json",
+				angular: false,
+				http: true,
+				output: "config-output",
+			};
+
+			const merged = mergeOptionsWithConfig(cliOptions, config);
+
+			expect(merged).toEqual({
+				input: "config.json",
+				url: "https://example.com/openapi.json",
+				angular: true,
+				http: true,
+				output: "cli-output",
+				help: false,
+				config: undefined,
+			});
+		});
 	});
 
 	describe("isAngularProject", () => {
@@ -259,7 +364,7 @@ describe("OpenAPI to TypeScript Converter CLI", () => {
 			const result = getOutputPaths(options);
 
 			expect(result.modelsPath).toBe(join("outputs", "models", "index.ts"));
-			expect(result.servicePath).toBe(join("outputs", "http-client", "sauron-api.client.ts"));
+			expect(result.servicePath).toBe("");
 		});
 
 		test("should return Angular paths when angular option is true and project detected", () => {
@@ -269,7 +374,7 @@ describe("OpenAPI to TypeScript Converter CLI", () => {
 			const result = getOutputPaths(options);
 
 			expect(result.modelsPath).toBe(join("src", "app", "sauron", "models", "index.ts"));
-			expect(result.servicePath).toBe(join("src", "app", "sauron", "angular-http-client", "sauron-api.service.ts"));
+			expect(result.servicePath).toBe("");
 		});
 
 		test("should return outputs paths when angular option is true but project not detected", () => {
@@ -278,7 +383,7 @@ describe("OpenAPI to TypeScript Converter CLI", () => {
 			const result = getOutputPaths(options);
 
 			expect(result.modelsPath).toBe(join("outputs", "models", "index.ts"));
-			expect(result.servicePath).toBe(join("outputs", "http-client", "sauron-api.client.ts"));
+			expect(result.servicePath).toBe("");
 		});
 
 		test("should use custom output directory when specified", () => {
@@ -296,21 +401,31 @@ describe("OpenAPI to TypeScript Converter CLI", () => {
 					output: customOutput
 				};
 
-				const result = getOutputPaths(options);
+					const result = getOutputPaths(options);
 
-				expect(result.modelsPath).toBe(join(customOutput, "models", "index.ts"));
-				expect(result.servicePath).toBe(join(customOutput, "http-client", "sauron-api.client.ts"));
-			} finally {
-				process.chdir(originalCwd);
-			}
-		});
+					expect(result.modelsPath).toBe(join(customOutput, "models", "index.ts"));
+					expect(result.servicePath).toBe("");
+				} finally {
+					process.chdir(originalCwd);
+				}
+			});
 
-		test("should create necessary directories", () => {
+		test("should create only models directory when http generation is disabled", () => {
 			const options = { input: "swagger.json", angular: false, http: false, help: false };
 
 			getOutputPaths(options);
 
 			expect(existsSync(join("outputs", "models"))).toBe(true);
+			expect(existsSync(join("outputs", "http-client"))).toBe(false);
+		});
+
+		test("should create service directory and path when http generation is enabled", () => {
+			const options = { input: "swagger.json", angular: false, http: true, help: false };
+
+			const result = getOutputPaths(options);
+
+			expect(result.modelsPath).toBe(join("outputs", "models", "index.ts"));
+			expect(result.servicePath).toBe(join("outputs", "http-client", "sauron-api.client.ts"));
 			expect(existsSync(join("outputs", "http-client"))).toBe(true);
 		});
 	});
@@ -328,7 +443,7 @@ describe("OpenAPI to TypeScript Converter CLI", () => {
 			expect(result).toContain("import { Injectable, inject } from \"@angular/core\"");
 			expect(result).toContain("import { HttpClient } from \"@angular/common/http\"");
 			expect(result).toContain("import { Observable } from \"rxjs\"");
-			expect(result).toContain("import { User, CreateUserDto } from \"./models\"");
+			expect(result).toContain("import { User, CreateUserDto } from \"../models\"");
 			expect(result).toContain("@Injectable({");
 			expect(result).toContain("providedIn: \"root\"");
 			expect(result).toContain("export class SauronApiService");
@@ -346,7 +461,7 @@ describe("OpenAPI to TypeScript Converter CLI", () => {
 			const result = generateAngularService(methods, imports, true);
 
 			expect(result).toContain("import { Injectable, inject } from \"@angular/core\"");
-			expect(result).not.toContain("import { } from \"./models\"");
+			expect(result).not.toContain("import { } from \"../models\"");
 			expect(result).toContain("getHealth(): Observable<any>");
 		});
 
@@ -390,7 +505,7 @@ describe("OpenAPI to TypeScript Converter CLI", () => {
 
 			const result = generateMethodName(path, httpMethod, operation);
 
-			expect(result).toBe("GetUsersByUserIdById");
+			expect(result).toBe("GetUsersByUserId");
 		});
 
 		test("should generate method name from tags when no descriptive path", () => {
@@ -443,7 +558,7 @@ describe("OpenAPI to TypeScript Converter CLI", () => {
 
 			const result = generateMethodName(path, httpMethod, operation);
 
-			expect(result).toBe("GetUserdataByUseridById");
+			expect(result).toBe("GetUserdataByUserid");
 		});
 
 		test("should fallback to Api when no tags or path info", () => {
@@ -492,7 +607,7 @@ describe("OpenAPI to TypeScript Converter CLI", () => {
 
 			const result = extractMethodParameters(path, operation);
 
-			expect(result).toBe("q?: any, sort: any");
+			expect(result).toBe("sort: any, q?: any");
 		});
 
 		test("should extract request body parameter for operations with body", () => {
@@ -524,7 +639,7 @@ describe("OpenAPI to TypeScript Converter CLI", () => {
 
 			const result = extractMethodParameters(path, operation);
 
-			expect(result).toBe("userId: any, limit?: any, offset: any, body: any");
+			expect(result).toBe("userId: any, offset: any, body: any, limit?: any");
 		});
 
 		test("should return empty string when no parameters", () => {
@@ -741,6 +856,62 @@ describe("OpenAPI to TypeScript Converter CLI", () => {
 			expect(usedTypes.has("User")).toBe(true);
 		});
 
+		test("should sanitize schema names in fetch method signatures", () => {
+			const openApiSchema = {
+				openapi: "3.0.4",
+				info: { title: "Test API", version: "1.0.0" },
+				paths: {
+					"/v1/users": {
+						post: {
+							requestBody: {
+								content: {
+									"application/json": {
+										schema: {
+											$ref: "#/components/schemas/Base.Library.Dto",
+										},
+									},
+								},
+							},
+							responses: {
+								"200": {
+									description: "ok",
+									content: {
+										"application/json": {
+											schema: {
+												$ref: "#/components/schemas/Base.Library.Dto",
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				components: {
+					schemas: {
+						"Base.Library.Dto": {
+							type: "object",
+							properties: {
+								id: { type: "integer" },
+							},
+						},
+					},
+				},
+			};
+
+			const { operationTypes, typeNameMap } =
+				createModelsWithOperationTypes(openApiSchema);
+			const methods = createFetchHttpMethods(
+				openApiSchema,
+				undefined,
+				operationTypes,
+				typeNameMap,
+			);
+
+			expect(methods[0]).toContain("body: BaseLibraryDto");
+			expect(methods[0]).toContain("Promise<BaseLibraryDto>");
+		});
+
 		test("should handle paths with parameters", () => {
 			const openApiSchema = {
 				openapi: "3.0.4",
@@ -795,7 +966,7 @@ describe("OpenAPI to TypeScript Converter CLI", () => {
 
 			expect(result).toHaveLength(2);
 
-			const userMethod = result.find((m) => m.includes("GetUsersByUserIdById"));
+			const userMethod = result.find((m) => m.includes("GetUsersByUserId"));
 			const searchMethod = result.find((m) => m.includes("GetSearchWithParams"));
 
 			expect(userMethod).toContain("userId: any");
@@ -803,7 +974,12 @@ describe("OpenAPI to TypeScript Converter CLI", () => {
 			expect(userMethod).toContain("Promise<User>");
 
 			expect(searchMethod).toContain("q: any, limit?: any");
-			expect(searchMethod).toContain("/api/search?q=${encodeURIComponent(q)}&limit=${encodeURIComponent(limit)}");
+			expect(searchMethod).toContain(
+				"const queryString = qs.stringify({ q: q, limit: limit }, { skipNull: true, skipEmptyString: true });",
+			);
+			expect(searchMethod).toContain(
+				"`/api/search${queryString ? `?${queryString}` : \"\"}`",
+			);
 			expect(searchMethod).toContain("Promise<Result[]>");
 
 			expect(usedTypes.has("User")).toBe(true);
@@ -848,7 +1024,7 @@ describe("OpenAPI to TypeScript Converter CLI", () => {
 			const result = createFetchHttpMethods(openApiSchema);
 
 			expect(result).toHaveLength(3);
-			expect(result.some((m) => m.includes("GetProductsByProductIdById"))).toBe(true);
+			expect(result.some((m) => m.includes("GetProductsByProductId"))).toBe(true);
 			expect(result.some((m) => m.includes("PutProductsByProductId"))).toBe(true);
 			expect(result.some((m) => m.includes("DeleteProductsByProductId"))).toBe(true);
 		});
@@ -876,6 +1052,309 @@ describe("OpenAPI to TypeScript Converter CLI", () => {
 		});
 	});
 
+	describe("Inline schema types", () => {
+		test("should generate request/response types from inline schemas", () => {
+			const openApiSchema = {
+				openapi: "3.0.4",
+				info: { title: "Test API", version: "1.0.0" },
+				paths: {
+					"/v1/auth/sign-in": {
+						post: {
+							operationId: "postV1AuthSign-in",
+							requestBody: {
+								content: {
+									"application/json": {
+										schema: {
+											type: "object",
+											properties: {
+												email: { type: "string" },
+												password: { type: "string" },
+											},
+											required: ["email", "password"],
+										},
+									},
+								},
+							},
+							responses: {
+								"200": {
+									description: "ok",
+									content: {
+										"application/json": {
+											schema: {
+												type: "object",
+												properties: {
+													access_token: { type: "string" },
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			};
+
+			const { models, operationTypes } =
+				createModelsWithOperationTypes(openApiSchema);
+
+			expect(
+				models.some((model) =>
+					model.includes("export interface PostV1AuthSignInRequest"),
+				),
+			).toBe(true);
+			expect(
+				models.some((model) =>
+					model.includes("export interface PostV1AuthSignInResponse"),
+				),
+			).toBe(true);
+
+			const { methods } = createAngularHttpClientMethods(
+				openApiSchema,
+				operationTypes,
+			);
+			expect(methods[0]).toContain(
+				"(body: PostV1AuthSignInRequest): Observable<PostV1AuthSignInResponse>",
+			);
+		});
+
+		test("should sanitize schema names in Angular method signatures", () => {
+			const openApiSchema = {
+				openapi: "3.0.4",
+				info: { title: "Test API", version: "1.0.0" },
+				paths: {
+					"/v1/users": {
+						get: {
+							responses: {
+								"200": {
+									content: {
+										"application/json": {
+											schema: {
+												$ref: "#/components/schemas/Base.Library.Dto",
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				components: {
+					schemas: {
+						"Base.Library.Dto": {
+							type: "object",
+							properties: {
+								id: { type: "integer" },
+							},
+						},
+					},
+				},
+			};
+
+			const { operationTypes, typeNameMap } =
+				createModelsWithOperationTypes(openApiSchema);
+			const { methods, imports } = createAngularHttpClientMethods(
+				openApiSchema,
+				operationTypes,
+				typeNameMap,
+			);
+
+			expect(methods[0]).toContain("Observable<BaseLibraryDto>");
+			expect(imports).toContain("BaseLibraryDto");
+		});
+	});
+
+	describe("Parameter typing", () => {
+		test("should type query params based on schema and honor numeric format", () => {
+			const openApiSchema = {
+				openapi: "3.0.4",
+				info: { title: "Test API", version: "1.0.0" },
+				paths: {
+					"/v1/banners/active": {
+						get: {
+							parameters: [
+								{
+									name: "limit",
+									in: "query",
+									required: false,
+									schema: { type: "string", format: "numeric" },
+								},
+								{
+									name: "lastKey",
+									in: "query",
+									required: false,
+									schema: { type: "string" },
+								},
+								{
+									name: "position",
+									in: "query",
+									required: false,
+									schema: { type: "string" },
+								},
+							],
+							responses: { "200": { description: "ok" } },
+						},
+					},
+				},
+			};
+
+			const methods = createFetchHttpMethods(openApiSchema);
+			expect(methods[0]).toContain(
+				"(limit?: number, lastKey?: string, position?: string)",
+			);
+		});
+
+		test("should use anyOf union types for query params", () => {
+			const openApiSchema = {
+				openapi: "3.0.4",
+				info: { title: "Test API", version: "1.0.0" },
+				paths: {
+					"/v1/search": {
+						get: {
+							parameters: [
+								{
+									name: "q",
+									in: "query",
+									required: true,
+									schema: {
+										anyOf: [{ type: "string" }, { type: "number" }],
+									},
+								},
+							],
+							responses: { "200": { description: "ok" } },
+						},
+					},
+				},
+			};
+
+			const methods = createFetchHttpMethods(openApiSchema);
+			expect(methods[0]).toContain("(q: string | number)");
+		});
+
+		test("should use oneOf union types for query params", () => {
+			const openApiSchema = {
+				openapi: "3.0.4",
+				info: { title: "Test API", version: "1.0.0" },
+				paths: {
+					"/v1/search": {
+						get: {
+							parameters: [
+								{
+									name: "q",
+									in: "query",
+									required: true,
+									schema: {
+										oneOf: [{ type: "string" }, { type: "number" }],
+									},
+								},
+							],
+							responses: { "200": { description: "ok" } },
+						},
+					},
+				},
+			};
+
+			const methods = createFetchHttpMethods(openApiSchema);
+			expect(methods[0]).toContain("(q: string | number)");
+		});
+
+		test("should use allOf intersection types for query params", () => {
+			const openApiSchema = {
+				openapi: "3.0.4",
+				info: { title: "Test API", version: "1.0.0" },
+				paths: {
+					"/v1/search": {
+						get: {
+							parameters: [
+								{
+									name: "filter",
+									in: "query",
+									required: true,
+									schema: {
+										allOf: [
+											{
+												type: "object",
+												properties: { a: { type: "string" } },
+												required: ["a"],
+											},
+											{
+												type: "object",
+												properties: { b: { type: "number" } },
+												required: ["b"],
+											},
+										],
+									},
+								},
+							],
+							responses: { "200": { description: "ok" } },
+						},
+					},
+				},
+			};
+
+			const methods = createFetchHttpMethods(openApiSchema);
+			expect(methods[0]).toContain(
+				"(filter: { a: string; } & { b: number; })",
+			);
+		});
+
+		test("should type path params based on schema", () => {
+			const openApiSchema = {
+				openapi: "3.0.4",
+				info: { title: "Test API", version: "1.0.0" },
+				paths: {
+					"/v1/banners/{bannerId}": {
+						get: {
+							parameters: [
+								{
+									name: "bannerId",
+									in: "path",
+									required: true,
+									schema: { type: "integer" },
+								},
+							],
+							responses: { "200": { description: "ok" } },
+						},
+					},
+				},
+			};
+
+			const methods = createFetchHttpMethods(openApiSchema);
+			expect(methods[0]).toContain("(bannerId: number)");
+		});
+
+		test("should apply typed params in Angular method signatures", () => {
+			const openApiSchema = {
+				openapi: "3.0.4",
+				info: { title: "Test API", version: "1.0.0" },
+				paths: {
+					"/v1/banners/{bannerId}": {
+						get: {
+							parameters: [
+								{
+									name: "bannerId",
+									in: "path",
+									required: true,
+									schema: { type: "integer" },
+								},
+								{
+									name: "limit",
+									in: "query",
+									required: false,
+									schema: { type: "string", format: "numeric" },
+								},
+							],
+							responses: { "200": { description: "ok" } },
+						},
+					},
+				},
+			};
+
+			const { methods } = createAngularHttpClientMethods(openApiSchema);
+			expect(methods[0]).toContain("(bannerId: number, limit?: number)");
+		});
+	});
+
 	describe("generateFetchService", () => {
 		test("should generate fetch service with methods and imports", () => {
 			const methods = [
@@ -888,6 +1367,7 @@ describe("OpenAPI to TypeScript Converter CLI", () => {
 			const result = generateFetchService(methods, modelsPath, usedTypes);
 
 			expect(result).toContain("// Generated fetch-based HTTP client");
+			expect(result).toContain("import qs from \"query-string\";");
 			expect(result).toContain("import { User, CreateUserDto } from \"../models\"");
 			expect(result).toContain("export class SauronApiClient");
 			expect(result).toContain("private baseUrl = ''");
@@ -908,6 +1388,7 @@ describe("OpenAPI to TypeScript Converter CLI", () => {
 			const result = generateFetchService(methods, modelsPath, usedTypes);
 
 			expect(result).toContain("// Generated fetch-based HTTP client");
+			expect(result).toContain("import qs from \"query-string\";");
 			expect(result).not.toContain("import {");
 			expect(result).toContain("export class SauronApiClient");
 			expect(result).toContain("async getHealth(): Promise<any>");
@@ -1000,7 +1481,7 @@ describe("OpenAPI to TypeScript Converter CLI", () => {
 			// Test that fetch service is generated
 			const fetchService = generateFetchService(fetchMethods, "/some/path", usedTypes);
 			expect(fetchService).toContain("export class SauronApiClient");
-			expect(fetchService).toContain("async GetUsersByUserIdById");
+			expect(fetchService).toContain("async GetUsersByUserId");
 		});
 	});
 });

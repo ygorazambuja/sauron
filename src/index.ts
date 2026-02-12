@@ -1,12 +1,17 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { parseArgs as parseCliArgs } from "util";
+import * as prettier from "prettier";
 import {
 	createAngularHttpClientMethods,
-	createModels,
+	createModelsWithOperationTypes,
 	fetchJsonFromUrl,
 	type OpenApiOperation,
 	type OpenApiPath,
+	type OpenApiSchema,
+	type OperationTypeMap,
+	type OperationTypeInfo,
 	readJsonFile,
 	verifySwaggerComposition,
 } from "./utils";
@@ -17,11 +22,46 @@ interface CliOptions {
 	angular: boolean;
 	http: boolean;
 	output?: string;
+	config?: string;
 	help: boolean;
 }
 
+interface SauronConfig {
+	input?: string;
+	url?: string;
+	angular?: boolean;
+	http?: boolean;
+	output?: string;
+}
+
+const DEFAULT_CONFIG_FILE = "sauron.config.ts";
+
 import type { z } from "zod";
 import type { SwaggerOrOpenAPISchema } from "./schemas/swagger";
+
+async function formatGeneratedFile(content: string, filePath: string): Promise<string> {
+	try {
+		return await prettier.format(content, { filepath: filePath });
+	} catch (error) {
+		console.warn(
+			`⚠️  Could not format ${filePath} with Prettier. Writing unformatted output.`,
+			error,
+		);
+		return content;
+	}
+}
+
+function parseCommand(): "generate" | "init" {
+	const { positionals } = parseCliArgs({
+		args: Bun.argv,
+		options: {},
+		strict: false,
+		allowPositionals: true,
+	});
+
+	const command = positionals.slice(2)[0];
+	return command === "init" ? "init" : "generate";
+}
 
 function parseArgs(): CliOptions {
 	const { values, positionals } = parseCliArgs({
@@ -46,6 +86,10 @@ function parseArgs(): CliOptions {
 			output: {
 				type: "string",
 				short: "o",
+			},
+			config: {
+				type: "string",
+				short: "c",
 			},
 			help: {
 				type: "boolean",
@@ -80,6 +124,9 @@ function parseArgs(): CliOptions {
 	if (values.output) {
 		options.output = values.output;
 	}
+	if (values.config) {
+		options.config = values.config;
+	}
 	if (values.help) {
 		options.help = values.help;
 	}
@@ -87,6 +134,9 @@ function parseArgs(): CliOptions {
 	// Handle positional arguments (JSON files)
 	// Last JSON file in positionals takes precedence
 	for (const positional of positionals.slice(2)) {
+		if (positional === "init") {
+			continue;
+		}
 		// Skip first two elements (bun and script path)
 		if (positional.endsWith(".json")) {
 			options.input = positional;
@@ -101,7 +151,7 @@ function showHelp(): void {
 Sauron - OpenAPI to TypeScript/Angular Converter
 
 USAGE:
-  sauron [OPTIONS] [INPUT_FILE]
+  sauron [COMMAND] [OPTIONS] [INPUT_FILE]
 
 OPTIONS:
   -i, --input <file>     Input OpenAPI/Swagger JSON file (default: swagger.json)
@@ -109,9 +159,15 @@ OPTIONS:
   -a, --angular          Generate Angular service in src/app/sauron (requires Angular project)
   -t, --http             Generate HTTP client/service methods
   -o, --output <dir>     Output directory (default: outputs or src/app/sauron)
+  -c, --config <file>    Config file path (default: sauron.config.ts)
   -h, --help            Show this help message
 
+COMMANDS:
+  init                   Create sauron.config.ts with default settings
+
 EXAMPLES:
+  sauron init
+  sauron --config ./sauron.config.ts
   sauron swagger.json
   sauron --input swaggerAfEstoque.json --angular --http
   sauron --url https://api.example.com/swagger.json --http
@@ -128,6 +184,70 @@ When --http flag is used without --angular:
 
 Without flags, generates only TypeScript models.
 `);
+}
+
+async function initConfigFile(configFilePath = DEFAULT_CONFIG_FILE): Promise<void> {
+	const resolvedConfigPath = resolve(configFilePath);
+	if (existsSync(resolvedConfigPath)) {
+		console.warn(`⚠️  Config file already exists: ${configFilePath}`);
+		return;
+	}
+	const angularProjectDetected = isAngularProject();
+	const defaultOutput = angularProjectDetected ? "src/app/sauron" : "outputs";
+
+	const template = `export default {
+  // Use either "input" or "url". If both are set, "url" takes precedence.
+  input: "swagger.json",
+  // url: "https://example.com/openapi.json",
+  output: "${defaultOutput}",
+  angular: ${angularProjectDetected},
+  http: true,
+};
+`;
+
+	const formattedTemplate = await formatGeneratedFile(template, resolvedConfigPath);
+	writeFileSync(resolvedConfigPath, formattedTemplate);
+	console.log(`✅ Created config file: ${configFilePath}`);
+}
+
+async function loadSauronConfig(
+	configFilePath = DEFAULT_CONFIG_FILE,
+): Promise<SauronConfig | null> {
+	const resolvedConfigPath = resolve(configFilePath);
+	if (!existsSync(resolvedConfigPath)) {
+		return null;
+	}
+
+	const configModule = await import(
+		`${pathToFileURL(resolvedConfigPath).href}?t=${Date.now()}`
+	);
+	const loadedConfig = configModule.default;
+
+	if (!loadedConfig || typeof loadedConfig !== "object") {
+		throw new Error(
+			`Invalid config file format in ${configFilePath}. Expected a default exported object.`,
+		);
+	}
+
+	return loadedConfig as SauronConfig;
+}
+
+function mergeOptionsWithConfig(
+	options: CliOptions,
+	config: SauronConfig,
+): CliOptions {
+	return {
+		input:
+			options.input !== "swagger.json"
+				? options.input
+				: (config.input ?? "swagger.json"),
+		url: options.url ?? config.url,
+		angular: options.angular || !!config.angular,
+		http: options.http || !!config.http,
+		output: options.output ?? config.output,
+		config: options.config,
+		help: options.help,
+	};
 }
 
 function isAngularProject(): boolean {
@@ -204,14 +324,30 @@ function getOutputPaths(options: CliOptions): {
 }
 
 async function main() {
-	const options = parseArgs();
+	const command = parseCommand();
+	const cliOptions = parseArgs();
 
-	if (options.help) {
+	if (cliOptions.help) {
 		showHelp();
 		return;
 	}
 
+	if (command === "init") {
+		await initConfigFile(cliOptions.config || DEFAULT_CONFIG_FILE);
+		return;
+	}
+
+	let options = cliOptions;
+
 	try {
+		const loadedConfig = await loadSauronConfig(
+			options.config || DEFAULT_CONFIG_FILE,
+		);
+		if (loadedConfig) {
+			options = mergeOptionsWithConfig(cliOptions, loadedConfig);
+			console.log(`⚙️  Using config file: ${options.config || DEFAULT_CONFIG_FILE}`);
+		}
+
 		let config: unknown;
 		if (options.url) {
 			console.log(`📖 Downloading OpenAPI spec from: ${options.url}`);
@@ -233,8 +369,10 @@ async function main() {
 
 		// Generate TypeScript models
 		console.log("🔧 Generating TypeScript models...");
-		const models = createModels(schema);
-		writeFileSync(modelsPath, models.join("\n"));
+		const { models, operationTypes, typeNameMap } =
+			createModelsWithOperationTypes(schema);
+		const formattedModels = await formatGeneratedFile(models.join("\n"), modelsPath);
+		writeFileSync(modelsPath, formattedModels);
 
 		let httpMethodsCount = 0;
 
@@ -244,25 +382,42 @@ async function main() {
 				// Generate Angular HTTP Client service
 				console.log("🔧 Generating Angular HTTP Client service...");
 				const { methods: angularMethods, imports: angularImports } =
-					createAngularHttpClientMethods(schema);
+					createAngularHttpClientMethods(
+						schema,
+						operationTypes,
+						typeNameMap,
+					);
 				const angularService = generateAngularService(
 					angularMethods,
 					angularImports,
 					true,
 				);
-				writeFileSync(servicePath, angularService);
+				const formattedAngularService = await formatGeneratedFile(
+					angularService,
+					servicePath,
+				);
+				writeFileSync(servicePath, formattedAngularService);
 				httpMethodsCount = angularMethods.length;
 			} else {
 				// Generate fetch-based HTTP methods
 				console.log("🔧 Generating fetch-based HTTP methods...");
 				const usedTypes = new Set<string>();
-				const fetchMethods = createFetchHttpMethods(schema, usedTypes);
+				const fetchMethods = createFetchHttpMethods(
+					schema,
+					usedTypes,
+					operationTypes,
+					typeNameMap,
+				);
 				const fetchService = generateFetchService(
 					fetchMethods,
 					modelsPath,
 					usedTypes,
 				);
-				writeFileSync(servicePath, fetchService);
+				const formattedFetchService = await formatGeneratedFile(
+					fetchService,
+					servicePath,
+				);
+				writeFileSync(servicePath, formattedFetchService);
 				httpMethodsCount = fetchMethods.length;
 			}
 		}
@@ -378,7 +533,7 @@ function generateMethodName(
 
 	let additionalSuffix = "";
 	if (hasPathParams && httpMethod === "get") {
-		additionalSuffix = "ById";
+		additionalSuffix = "";
 	} else if (hasQueryParams && httpMethod === "get") {
 		additionalSuffix = "WithParams";
 	} else if (hasBody && ["post", "put", "patch"].includes(httpMethod)) {
@@ -388,6 +543,37 @@ function generateMethodName(
 	return methodPrefix + baseName + additionalSuffix;
 }
 
+function toPascalCase(value: string): string {
+	const sanitized = value
+		.replace(/[^a-zA-Z0-9]+/g, " ")
+		.split(" ")
+		.filter(Boolean)
+		.map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+		.join("");
+
+	if (!sanitized) {
+		return "";
+	}
+
+	if (/^[0-9]/.test(sanitized)) {
+		return `Type${sanitized}`;
+	}
+
+	return sanitized;
+}
+
+function sanitizeTypeName(value: string): string {
+	const sanitized = toPascalCase(value);
+	return sanitized || "Type";
+}
+
+function resolveTypeName(
+	value: string,
+	typeNameMap?: Map<string, string>,
+): string {
+	return typeNameMap?.get(value) ?? sanitizeTypeName(value);
+}
+
 /**
  * Extracts method parameters from path and operation
  * @param path - The API path
@@ -395,19 +581,190 @@ function generateMethodName(
  * @returns Parameter string for the method signature
  * @private
  */
-function extractMethodParameters(
+function convertParamSchemaToType(
+	schema: any,
+	typeNameMap?: Map<string, string>,
+): string {
+	if (!schema || typeof schema !== "object") {
+		return "any";
+	}
+
+	if (schema.$ref && typeof schema.$ref === "string") {
+		const refParts = schema.$ref.split("/");
+		const rawName = refParts[refParts.length - 1];
+		return rawName ? resolveTypeName(rawName, typeNameMap) : "any";
+	}
+
+	if (Array.isArray(schema.enum)) {
+		const unionValues = schema.enum
+			.map((enumValue: unknown) =>
+				typeof enumValue === "string" ? `"${enumValue}"` : String(enumValue),
+			)
+			.join(" | ");
+		return unionValues || "any";
+	}
+
+	if (Array.isArray(schema.anyOf) || Array.isArray(schema.oneOf)) {
+		const variants = (schema.anyOf || schema.oneOf || [])
+			.map((variant: any) => convertParamSchemaToType(variant, typeNameMap))
+			.filter(Boolean);
+		return variants.join(" | ") || "any";
+	}
+
+	if (Array.isArray(schema.allOf)) {
+		const variants = schema.allOf
+			.map((variant: any) => convertParamSchemaToType(variant, typeNameMap))
+			.filter(Boolean);
+		return variants.join(" & ") || "any";
+	}
+
+	if (schema.type === "array" && schema.items) {
+		const itemType = convertParamSchemaToType(schema.items, typeNameMap);
+		return `${itemType}[]`;
+	}
+
+	if (schema.type === "object" && schema.properties) {
+		const requiredProperties = Array.isArray(schema.required)
+			? schema.required
+			: [];
+		const hasExplicitRequiredList = requiredProperties.length > 0;
+		const entries = Object.entries(schema.properties as Record<string, any>);
+
+		if (entries.length === 0) {
+			return "{}";
+		}
+
+		const propertyDefinitions = entries.map(([propertyName, propertySchema]) => {
+			const propertyType = convertParamSchemaToType(
+				propertySchema,
+				typeNameMap,
+			);
+			const isRequired = hasExplicitRequiredList
+				? requiredProperties.includes(propertyName)
+				: true;
+			const optionalMarker = isRequired ? "" : "?";
+			return `${propertyName}${optionalMarker}: ${propertyType};`;
+		});
+
+		return `{ ${propertyDefinitions.join(" ")} }`;
+	}
+
+	let typeScriptType: string;
+	switch (schema.type) {
+		case "string":
+			if (schema.format === "date-time") {
+				typeScriptType = "string";
+			} else if (schema.format === "numeric") {
+				typeScriptType = "number";
+			} else {
+				typeScriptType = "string";
+			}
+			break;
+		case "number":
+		case "integer":
+			typeScriptType = "number";
+			break;
+		case "boolean":
+			typeScriptType = "boolean";
+			break;
+		default:
+			typeScriptType = "any";
+			break;
+	}
+
+	if (schema.nullable === true) {
+		typeScriptType += " | null";
+	}
+
+	return typeScriptType;
+}
+
+function addParamTypeImports(paramTypes: string[], usedTypes: Set<string>) {
+	for (const type of paramTypes) {
+		const parts = type.split(/[\|&]/).map((part) => part.trim());
+		for (let part of parts) {
+			while (part.endsWith("[]")) {
+				part = part.slice(0, -2);
+			}
+			if (!part) {
+				continue;
+			}
+			if (
+				part === "string" ||
+				part === "number" ||
+				part === "boolean" ||
+				part === "any" ||
+				part === "unknown" ||
+				part === "object" ||
+				part === "null" ||
+				part === "undefined" ||
+				part === "Date"
+			) {
+				continue;
+			}
+			if (
+				part.startsWith("\"") ||
+				part.startsWith("'") ||
+				part.startsWith("{") ||
+				/^[0-9]/.test(part)
+			) {
+				continue;
+			}
+			usedTypes.add(part);
+		}
+	}
+}
+
+function buildParameterInfo(
 	path: string,
 	operation: OpenApiOperation,
-): string {
-	const requiredParams: string[] = [];
-	const optionalParams: string[] = [];
+	typeNameMap?: Map<string, string>,
+) {
+	const usedNames = new Set<string>();
+
+	const makeUniqueName = (base: string, suffix: string) => {
+		if (!usedNames.has(base)) {
+			usedNames.add(base);
+			return base;
+		}
+		let candidate = `${base}${suffix}`;
+		if (!usedNames.has(candidate)) {
+			usedNames.add(candidate);
+			return candidate;
+		}
+		let counter = 2;
+		while (usedNames.has(`${candidate}${counter}`)) {
+			counter++;
+		}
+		const unique = `${candidate}${counter}`;
+		usedNames.add(unique);
+		return unique;
+	};
+
+	const pathParams: Array<{ name: string; varName: string; type: string }> = [];
+	const queryParams: Array<{
+		name: string;
+		varName: string;
+		required: boolean;
+		type: string;
+	}> = [];
+	let bodyParam: { name: string; varName: string } | null = null;
 
 	// Extract path parameters (always required)
 	const pathParamMatches = path.match(/\{([^}]+)\}/g);
 	if (pathParamMatches) {
+		const pathParamSchemas =
+			operation.parameters?.filter((param) => param.in === "path") || [];
 		for (const match of pathParamMatches) {
 			const paramName = match.slice(1, -1); // Remove { }
-			requiredParams.push(`${paramName}: any`);
+			usedNames.add(paramName);
+			const schema = pathParamSchemas.find(
+				(param) => param.name === paramName,
+			)?.schema;
+			const type = schema
+				? convertParamSchemaToType(schema, typeNameMap)
+				: "any";
+			pathParams.push({ name: paramName, varName: paramName, type });
 		}
 	}
 
@@ -415,21 +772,61 @@ function extractMethodParameters(
 	if (operation.parameters) {
 		for (const param of operation.parameters) {
 			if (param.in === "query") {
-				if (param.required) {
-					requiredParams.push(`${param.name}: any`);
-				} else {
-					optionalParams.push(`${param.name}?: any`);
-				}
+				const varName = makeUniqueName(param.name, "Query");
+				queryParams.push({
+					name: param.name,
+					varName,
+					required: !!param.required,
+					type: convertParamSchemaToType(param.schema, typeNameMap),
+				});
 			}
 		}
 	}
 
 	// Extract request body parameter for POST/PUT/PATCH (always required)
 	if (operation.requestBody) {
-		requiredParams.push("body: any");
+		const varName = makeUniqueName("body", "Payload");
+		bodyParam = { name: "body", varName };
 	}
 
-	// Combine required params first, then optional params
+	return { pathParams, queryParams, bodyParam };
+}
+
+function extractMethodParameters(
+	path: string,
+	operation: OpenApiOperation,
+	typeInfo?: OperationTypeInfo,
+	components?: any,
+	typeNameMap?: Map<string, string>,
+): string {
+	const requiredParams: string[] = [];
+	const optionalParams: string[] = [];
+	const { pathParams, queryParams, bodyParam } = buildParameterInfo(
+		path,
+		operation,
+		typeNameMap,
+	);
+
+	for (const param of pathParams) {
+		requiredParams.push(`${param.varName}: ${param.type}`);
+	}
+
+	for (const param of queryParams) {
+		if (param.required) {
+			requiredParams.push(`${param.varName}: ${param.type}`);
+		} else {
+			optionalParams.push(`${param.varName}?: ${param.type}`);
+		}
+	}
+
+	if (bodyParam) {
+		const bodyType =
+			typeInfo?.requestType ??
+			extractRequestType(operation, typeNameMap) ??
+			"any";
+		requiredParams.push(`${bodyParam.varName}: ${bodyType}`);
+	}
+
 	return [...requiredParams, ...optionalParams].join(", ");
 }
 
@@ -443,6 +840,7 @@ function extractMethodParameters(
 function extractResponseType(
 	operation: OpenApiOperation,
 	_components?: any,
+	typeNameMap?: Map<string, string>,
 ): string {
 	// Look for 200 response first, then any 2xx response
 	const response =
@@ -468,14 +866,16 @@ function extractResponseType(
 		if (schema.$ref && typeof schema.$ref === "string") {
 			const refParts = schema.$ref.split("/");
 			const typeName = refParts[refParts.length - 1];
-			return typeName || "any";
+			return typeName ? resolveTypeName(typeName, typeNameMap) : "any";
 		}
 
 		// Handle direct type
 		if (schema.type === "array" && schema.items?.$ref) {
 			const refParts = schema.items.$ref.split("/");
 			const itemTypeName = refParts[refParts.length - 1];
-			return itemTypeName ? `${itemTypeName}[]` : "any[]";
+			return itemTypeName
+				? `${resolveTypeName(itemTypeName, typeNameMap)}[]`
+				: "any[]";
 		}
 
 		// Fallback to any for complex schemas
@@ -483,6 +883,47 @@ function extractResponseType(
 	}
 
 	return "any";
+}
+
+function getPreferredContentSchema(
+	content?: Record<string, { schema: OpenApiSchema }>,
+): OpenApiSchema | undefined {
+	if (!content) {
+		return undefined;
+	}
+
+	if (content["application/json"]?.schema) {
+		return content["application/json"].schema;
+	}
+
+	const firstKey = Object.keys(content)[0];
+	return firstKey ? content[firstKey]?.schema : undefined;
+}
+
+function extractRequestType(
+	operation: OpenApiOperation,
+	typeNameMap?: Map<string, string>,
+): string | undefined {
+	const schema = getPreferredContentSchema(operation.requestBody?.content);
+	if (!schema) {
+		return undefined;
+	}
+
+	if (schema.$ref && typeof schema.$ref === "string") {
+		const refParts = schema.$ref.split("/");
+		const rawName = refParts[refParts.length - 1];
+		return rawName ? resolveTypeName(rawName, typeNameMap) : undefined;
+	}
+
+	if (schema.type === "array" && schema.items?.$ref) {
+		const refParts = schema.items.$ref.split("/");
+		const itemTypeName = refParts[refParts.length - 1];
+		return itemTypeName
+			? `${resolveTypeName(itemTypeName, typeNameMap)}[]`
+			: undefined;
+	}
+
+	return undefined;
 }
 
 /**
@@ -493,6 +934,8 @@ function extractResponseType(
 function createFetchHttpMethods(
 	data: z.infer<typeof SwaggerOrOpenAPISchema>,
 	usedTypes?: Set<string>,
+	operationTypes?: OperationTypeMap,
+	typeNameMap?: Map<string, string>,
 ): string[] {
 	if (!data.paths) {
 		return [];
@@ -507,6 +950,8 @@ function createFetchHttpMethods(
 			pathItem as OpenApiPath,
 			data.components,
 			usedTypes,
+			operationTypes,
+			typeNameMap,
 		);
 		methods.push(...pathMethods);
 	}
@@ -525,6 +970,8 @@ function generateFetchMethodsForPath(
 	operations: OpenApiPath,
 	components?: any,
 	usedTypes?: Set<string>,
+	operationTypes?: OperationTypeMap,
+	typeNameMap?: Map<string, string>,
 ): string[] {
 	const methods: string[] = [];
 	const httpMethods = [
@@ -545,6 +992,8 @@ function generateFetchMethodsForPath(
 				operations[httpMethod],
 				components,
 				usedTypes,
+				operationTypes,
+				typeNameMap,
 			);
 			if (method) {
 				methods.push(method);
@@ -568,17 +1017,41 @@ function generateFetchMethod(
 	operation: OpenApiOperation,
 	components?: any,
 	usedTypes?: Set<string>,
+	operationTypes?: OperationTypeMap,
+	typeNameMap?: Map<string, string>,
 ): string | null {
 	try {
 		const methodName = generateMethodName(path, httpMethod, operation);
-		const parameters = extractMethodParameters(path, operation);
+		const paramInfo = buildParameterInfo(path, operation, typeNameMap);
+		const typeInfo = operationTypes?.[path]?.[httpMethod];
+		const parameters = extractMethodParameters(
+			path,
+			operation,
+			typeInfo,
+			components,
+			typeNameMap,
+		);
 
 		// Extract response type from operation
-		const responseType = extractResponseType(operation, components);
+		const requestType =
+			typeInfo?.requestType ?? extractRequestType(operation, typeNameMap);
+		let responseType =
+			typeInfo?.responseType ??
+			extractResponseType(operation, components, typeNameMap);
+		if (
+			responseType === "any" &&
+			requestType &&
+			["post", "put", "patch"].includes(httpMethod)
+		) {
+			responseType = requestType;
+		}
 		const returnType =
 			responseType !== "any" ? `Promise<${responseType}>` : "Promise<any>";
 
 		// Track used types for imports
+		if (requestType) {
+			usedTypes?.add(requestType);
+		}
 		if (usedTypes && responseType !== "any" && !responseType.includes("[]")) {
 			// For single types (not arrays), add to imports
 			usedTypes.add(responseType);
@@ -587,34 +1060,63 @@ function generateFetchMethod(
 			const baseType = responseType.replace("[]", "");
 			usedTypes.add(baseType);
 		}
+		if (usedTypes) {
+			const paramTypes = [
+				...paramInfo.pathParams.map((param) => param.type),
+				...paramInfo.queryParams.map((param) => param.type),
+			];
+			addParamTypeImports(paramTypes, usedTypes);
+		}
 
 		// Handle query parameters first
 		const queryParams =
-			operation.parameters?.filter((p) => p.in === "query") || [];
+			paramInfo.queryParams || [];
 		const hasQueryParams = queryParams.length > 0;
 		const hasPathParams = path.includes("{");
 
 		let url: string;
-		let queryString = "";
 
 		if (hasQueryParams) {
-			queryString = queryParams
-				.map((param) => `${param.name}=\${encodeURIComponent(${param.name})}`)
-				.join("&");
+			const queryObject = queryParams
+				.map((param) => `${param.name}: ${param.varName}`)
+				.join(", ");
+			const queryStringLine = `const queryString = qs.stringify({ ${queryObject} }, { skipNull: true, skipEmptyString: true });`;
+
+			if (hasPathParams) {
+				const pathWithParams = path.replace(/\{([^}]+)\}/g, "${$1}");
+				url = `\`${
+					pathWithParams
+				}\${queryString ? \`?\${queryString}\` : \"\"}\``;
+				return buildFetchMethodWithQueryString(
+					methodName,
+					parameters,
+					returnType,
+					url,
+					operation,
+					paramInfo,
+					queryStringLine,
+					httpMethod,
+				);
+			}
+
+			url = `\`${path}\${queryString ? \`?\${queryString}\` : \"\"}\``;
+			return buildFetchMethodWithQueryString(
+				methodName,
+				parameters,
+				returnType,
+				url,
+				operation,
+				paramInfo,
+				queryStringLine,
+				httpMethod,
+			);
 		}
 
 		// Build URL based on parameters
-		if (hasPathParams && hasQueryParams) {
-			// Both path and query parameters - use template literal
-			const pathWithParams = path.replace(/\{([^}]+)\}/g, "${$1}");
-			url = `\`${pathWithParams}?${queryString}\``;
-		} else if (hasPathParams) {
+		if (hasPathParams) {
 			// Only path parameters
 			const pathWithParams = path.replace(/\{([^}]+)\}/g, "${$1}");
 			url = `\`${pathWithParams}\``;
-		} else if (hasQueryParams) {
-			// Only query parameters - use template literal for variable interpolation
-			url = `\`${path}?${queryString}\``;
 		} else {
 			// No parameters
 			url = `\`${path}\``;
@@ -631,7 +1133,8 @@ function generateFetchMethod(
 
 		// Add body for POST/PUT/PATCH
 		if (operation.requestBody) {
-			fetchOptions.push(`body: JSON.stringify(body)`);
+			const bodyVar = paramInfo.bodyParam?.varName || "body";
+			fetchOptions.push(`body: JSON.stringify(${bodyVar})`);
 		}
 
 		const optionsString = fetchOptions.join(",\n    ");
@@ -654,6 +1157,46 @@ function generateFetchMethod(
 		);
 		return null;
 	}
+}
+
+function buildFetchMethodWithQueryString(
+	methodName: string,
+	parameters: string,
+	returnType: string,
+	url: string,
+	operation: OpenApiOperation,
+	paramInfo: { bodyParam: { varName: string } | null },
+	queryStringLine: string,
+	httpMethod: string,
+): string {
+	const fetchOptions: string[] = [];
+	fetchOptions.push(`method: '${httpMethod.toUpperCase()}'`);
+
+	// Add headers
+	fetchOptions.push(`headers: {
+    'Content-Type': 'application/json',
+  }`);
+
+	// Add body for POST/PUT/PATCH
+	if (operation.requestBody) {
+		const bodyVar = paramInfo.bodyParam?.varName || "body";
+		fetchOptions.push(`body: JSON.stringify(${bodyVar})`);
+	}
+
+	const optionsString = fetchOptions.join(",\n    ");
+
+	return `  async ${methodName}(${parameters}): ${returnType} {
+    ${queryStringLine}
+    const response = await fetch(${url}, {
+      ${optionsString}
+    });
+
+    if (!response.ok) {
+      throw new Error(\`HTTP error! status: \${response.status}\`);
+    }
+
+    return await response.json();
+  }`;
 }
 
 /**
@@ -681,6 +1224,7 @@ function generateFetchService(
 	}
 
 	const serviceTemplate = `// Generated fetch-based HTTP client
+import qs from "query-string";
 ${importStatement}export class SauronApiClient {
   private baseUrl = ''; // Configure your base URL
 
@@ -709,9 +1253,13 @@ export {
 	generateFetchService,
 	generateMethodName,
 	getOutputPaths,
+	initConfigFile,
 	isAngularProject,
+	loadSauronConfig,
 	main,
+	mergeOptionsWithConfig,
 	parseArgs,
+	parseCommand,
 };
 
 // Only run main when this file is executed directly (not when imported for testing)

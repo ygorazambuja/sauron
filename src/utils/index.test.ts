@@ -216,6 +216,43 @@ describe("OpenAPI to TypeScript Converter Utilities", () => {
 			expect(postInterface).toContain("content: string;");
 		});
 
+		test("should sanitize schema names and references with invalid characters", () => {
+			const openApiSchema = {
+				openapi: "3.0.4",
+				info: { title: "Test API", version: "1.0.0" },
+				paths: {},
+				components: {
+					schemas: {
+						"Base.Library.Dto": {
+							type: "object",
+							properties: {
+								child: {
+									$ref: "#/components/schemas/Base.Library.Child",
+								},
+							},
+						},
+						"Base.Library.Child": {
+							type: "object",
+							properties: {
+								id: { type: "integer" },
+							},
+						},
+					},
+				},
+			};
+
+			const result = createModels(openApiSchema);
+			const dtoInterface = result.find((r) =>
+				r.includes("interface BaseLibraryDto"),
+			);
+			const childInterface = result.find((r) =>
+				r.includes("interface BaseLibraryChild"),
+			);
+
+			expect(dtoInterface).toContain("child: BaseLibraryChild;");
+			expect(childInterface).toContain("id: number;");
+		});
+
 		test("should handle schemas with required fields", () => {
 			const openApiSchema = {
 				openapi: "3.0.4",
@@ -289,7 +326,27 @@ describe("OpenAPI to TypeScript Converter Utilities", () => {
 			expect(result[0]).toBe("export type Priority = 1 | 2 | 3;");
 		});
 
-		test("should throw error when no components.schemas found", () => {
+		test("should convert numeric format strings to number", () => {
+			const openApiSchema = {
+				openapi: "3.0.4",
+				info: { title: "Test API", version: "1.0.0" },
+				paths: {},
+				components: {
+					schemas: {
+						NumericString: {
+							type: "string",
+							format: "numeric",
+						},
+					},
+				},
+			};
+
+			const result = createModels(openApiSchema);
+
+			expect(result[0]).toBe("export type NumericString = number;");
+		});
+
+		test("should return empty array when no components.schemas found", () => {
 			const openApiSchema = {
 				openapi: "3.0.4",
 				info: { title: "Test API", version: "1.0.0" },
@@ -297,9 +354,8 @@ describe("OpenAPI to TypeScript Converter Utilities", () => {
 				// No components
 			};
 
-			expect(() => createModels(openApiSchema)).toThrow(
-				"No schemas found in OpenAPI components",
-			);
+			const result = createModels(openApiSchema);
+			expect(result).toHaveLength(0);
 		});
 
 		test("should handle empty schemas gracefully", () => {
@@ -421,6 +477,206 @@ describe("OpenAPI to TypeScript Converter Utilities", () => {
 
 			// Check that UserDto is in imports
 			expect(imports).toContain("UserDto");
+		});
+
+		test("should handle missing requestBody and date-time query params", () => {
+			const openApiSchema = {
+				openapi: "3.0.4",
+				info: { title: "Test API", version: "1.0.0" },
+				paths: {
+					"/api/reports": {
+						post: {
+							tags: ["Report"],
+							parameters: [
+								{
+									name: "createdAt",
+									in: "query",
+									required: false,
+									schema: { type: "string", format: "date-time" },
+								},
+							],
+							responses: {
+								"200": {
+									description: "Success",
+									content: {
+										"application/json": {
+											schema: { $ref: "#/components/schemas/ReportDto" },
+										},
+									},
+								},
+							},
+						},
+					},
+					"/api/audits": {
+						get: {
+							tags: ["Audit"],
+							parameters: [
+								{
+									name: "from",
+									in: "query",
+									required: true,
+									schema: { type: "string", format: "date-time" },
+								},
+							],
+							responses: {
+								"200": {
+									description: "Success",
+									content: {
+										"application/json": {
+											schema: { $ref: "#/components/schemas/AuditDto" },
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				components: {
+					schemas: {
+						ReportDto: {
+							type: "object",
+							properties: {
+								id: { type: "integer" },
+							},
+						},
+						AuditDto: {
+							type: "object",
+							properties: {
+								id: { type: "integer" },
+							},
+						},
+					},
+				},
+			};
+
+			const { methods } = createAngularHttpClientMethods(openApiSchema);
+			const reportMethod = methods.find((m) => m.includes("PostReport"));
+			const auditMethod = methods.find((m) => m.includes("GetAuditWithParams"));
+
+			expect(reportMethod).toContain("createdAt?: string");
+			expect(reportMethod).toContain(
+				"return this.httpClient.post<ReportDto>(\"/api/reports\", null, { params: { createdAt: createdAt } });",
+			);
+			expect(auditMethod).toContain("from: string");
+			expect(auditMethod).toContain(
+				"return this.httpClient.get<AuditDto>(\"/api/audits\", { params: { from: from } });",
+			);
+		});
+
+		test("should import enum types used in query parameters", () => {
+			const openApiSchema = {
+				openapi: "3.0.4",
+				info: { title: "Test API", version: "1.0.0" },
+				paths: {
+					"/api/ContabilizarDocumento/ContabilizarDocumento": {
+						post: {
+							tags: ["ContabilizarDocumento"],
+							parameters: [
+								{
+									name: "contratoID",
+									in: "query",
+									required: false,
+									schema: { type: "integer", format: "int32" },
+								},
+								{
+									name: "tipoOperacao",
+									in: "query",
+									required: false,
+									schema: {
+										$ref: "#/components/schemas/TipoDeOperacaoContratoEnum",
+									},
+								},
+							],
+							requestBody: {
+								content: {
+									"application/json": {
+										schema: {
+											$ref: "#/components/schemas/ContabilizarDocumento",
+										},
+									},
+								},
+							},
+							responses: {
+								"200": { description: "Success" },
+							},
+						},
+					},
+				},
+				components: {
+					schemas: {
+						ContabilizarDocumento: {
+							type: "object",
+							properties: {
+								id: { type: "integer" },
+							},
+						},
+						TipoDeOperacaoContratoEnum: {
+							enum: [91, 92],
+							type: "integer",
+							format: "int32",
+						},
+					},
+				},
+			};
+
+			const { methods, imports } =
+				createAngularHttpClientMethods(openApiSchema);
+			const method = methods.find((m) =>
+				m.includes("PostContabilizarDocumentoContabilizarDocumentoCreate"),
+			);
+
+			expect(method).toContain("tipoOperacao?: TipoDeOperacaoContratoEnum");
+			expect(imports).toContain("TipoDeOperacaoContratoEnum");
+		});
+
+		test("should fallback to request type when response schema is missing", () => {
+			const openApiSchema = {
+				openapi: "3.0.4",
+				info: { title: "Test API", version: "1.0.0" },
+				paths: {
+					"/api/AgenteContrato": {
+						post: {
+							tags: ["AgenteContrato"],
+							requestBody: {
+								content: {
+									"application/json": {
+										schema: {
+											$ref: "#/components/schemas/AgenteContratoDto",
+										},
+									},
+								},
+							},
+							responses: {
+								"200": {
+									description: "OK",
+								},
+							},
+						},
+					},
+				},
+				components: {
+					schemas: {
+						AgenteContratoDto: {
+							type: "object",
+							properties: {
+								id: { type: "integer" },
+							},
+						},
+					},
+				},
+			};
+
+			const { methods, imports } =
+				createAngularHttpClientMethods(openApiSchema);
+			const method = methods.find((m) =>
+				m.includes("PostAgenteContratoCreate"),
+			);
+
+			expect(method).toContain("Observable<AgenteContratoDto>");
+			expect(method).toContain(
+				"return this.httpClient.post<AgenteContratoDto>(\"/api/AgenteContrato\", body);",
+			);
+			expect(imports).toContain("AgenteContratoDto");
 		});
 
 		test("should handle full OpenAPI spec with all features", () => {

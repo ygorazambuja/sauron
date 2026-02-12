@@ -33,6 +33,9 @@ bun build --compile ./src/index.ts --outfile sauron
 # Instalar dependências
 bun install
 
+# Criar arquivo de configuração inicial
+bun run cli -- init
+
 # Executar diretamente
 bun run src/index.ts
 
@@ -65,11 +68,29 @@ O comando irá:
 
 ### Flags Disponíveis
 
+- **`init`**: Cria `sauron.config.ts` com configurações iniciais
 - **Sem flags**: Apenas models TypeScript
 - **`--http`**: Models + métodos HTTP (fetch-based por padrão)
 - **`--angular --http`**: Models + serviço Angular (requer projeto Angular)
 - **`--input arquivo.json`**: Especificar arquivo de entrada
 - **`--output diretorio`**: Diretório de saída customizado
+- **`--config arquivo.ts`**: Caminho para arquivo de configuração (padrão: `sauron.config.ts`)
+
+### Arquivo de Configuração (`sauron.config.ts`)
+
+Você pode centralizar as opções do CLI em um arquivo:
+
+```ts
+export default {
+  input: "swagger.json",
+  // url: "https://api.exemplo.com/openapi.json",
+  output: "outputs",
+  angular: false,
+  http: true,
+};
+```
+
+As flags da CLI têm prioridade sobre os valores do arquivo de configuração.
 
 ### Uso Programático
 
