@@ -81,13 +81,21 @@ O comando irá:
 Você pode centralizar as opções do CLI em um arquivo:
 
 ```ts
+type SauronConfig = {
+  input?: string;
+  url?: string;
+  output?: string;
+  angular?: boolean;
+  http?: boolean;
+};
+
 export default {
   input: "swagger.json",
   // url: "https://api.exemplo.com/openapi.json",
   output: "outputs",
   angular: false,
   http: true,
-};
+} satisfies SauronConfig;
 ```
 
 As flags da CLI têm prioridade sobre os valores do arquivo de configuração.

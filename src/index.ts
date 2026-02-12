@@ -195,14 +195,22 @@ async function initConfigFile(configFilePath = DEFAULT_CONFIG_FILE): Promise<voi
 	const angularProjectDetected = isAngularProject();
 	const defaultOutput = angularProjectDetected ? "src/app/sauron" : "outputs";
 
-	const template = `export default {
+	const template = `type SauronConfig = {
+  input?: string;
+  url?: string;
+  output?: string;
+  angular?: boolean;
+  http?: boolean;
+};
+
+export default {
   // Use either "input" or "url". If both are set, "url" takes precedence.
   input: "swagger.json",
   // url: "https://example.com/openapi.json",
   output: "${defaultOutput}",
   angular: ${angularProjectDetected},
   http: true,
-};
+} satisfies SauronConfig;
 `;
 
 	const formattedTemplate = await formatGeneratedFile(template, resolvedConfigPath);
