@@ -519,9 +519,7 @@ function generateAngularService(
 	}
 
 	const interfacesBlock =
-		paramsInterfaces.length > 0
-			? paramsInterfaces.join("\n\n") + "\n\n"
-			: "";
+		paramsInterfaces.length > 0 ? `${paramsInterfaces.join("\n\n")}\n\n` : "";
 
 	const serviceTemplate = `import { Injectable, inject } from "@angular/core";
 import { HttpClient } from "@angular/common/http";
@@ -1317,9 +1315,7 @@ function generateFetchService(
 	}
 
 	const interfacesBlock =
-		paramsInterfaces.length > 0
-			? paramsInterfaces.join("\n\n") + "\n\n"
-			: "";
+		paramsInterfaces.length > 0 ? `${paramsInterfaces.join("\n\n")}\n\n` : "";
 
 	const serviceTemplate = `// Generated fetch-based HTTP client
 import qs from "query-string";
