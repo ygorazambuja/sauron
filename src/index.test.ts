@@ -18,6 +18,7 @@ import {
 	extractMethodParameters,
 	extractResponseType,
 	createFetchHttpMethods,
+	createGeneratedFileHeader,
 	generateFetchService,
 	initConfigFile,
 	loadSauronConfig,
@@ -1417,6 +1418,30 @@ describe("OpenAPI to TypeScript Converter CLI", () => {
 			expect(result).toContain("constructor(baseUrl?: string) {");
 			expect(result).toContain("if (baseUrl) {");
 			expect(result).toContain("this.baseUrl = baseUrl;");
+		});
+	});
+
+	describe("createGeneratedFileHeader", () => {
+		test("should include timestamp and OpenAPI metadata in header", () => {
+			const schema = {
+				openapi: "3.0.3",
+				info: {
+					title: "SIAFIC Divida WebApi",
+					version: "v1",
+				},
+				paths: {},
+			};
+
+			const result = createGeneratedFileHeader(
+				schema as any,
+				"2026-02-13T10:00:00.000Z",
+			);
+
+			expect(result).toContain("Gerado por Sauron v");
+			expect(result).toContain("Timestamp: 2026-02-13T10:00:00.000Z");
+			expect(result).toContain("Nao edite manualmente.");
+			expect(result).toContain("SIAFIC Divida WebApi");
+			expect(result).toContain("OpenAPI spec version: v1");
 		});
 	});
 

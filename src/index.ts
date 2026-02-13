@@ -35,6 +35,7 @@ export interface SauronConfig {
 }
 
 const DEFAULT_CONFIG_FILE = "sauron.config.ts";
+const DEFAULT_SAURON_VERSION = "1.0.0";
 
 import type { z } from "zod";
 import type { SwaggerOrOpenAPISchema } from "./schemas/swagger";
@@ -49,6 +50,35 @@ async function formatGeneratedFile(content: string, filePath: string): Promise<s
 		);
 		return content;
 	}
+}
+
+function getSauronVersion(): string {
+	try {
+		const packageJsonPath = resolve(import.meta.dir, "..", "package.json");
+		const packageJsonContent = readFileSync(packageJsonPath, "utf-8");
+		const packageJson = JSON.parse(packageJsonContent) as { version?: unknown };
+		if (typeof packageJson.version === "string" && packageJson.version.length > 0) {
+			return packageJson.version;
+		}
+	} catch {
+		// Fallback to default version when package metadata cannot be read.
+	}
+
+	return DEFAULT_SAURON_VERSION;
+}
+
+function createGeneratedFileHeader(
+	schema: z.infer<typeof SwaggerOrOpenAPISchema>,
+	generatedAt = new Date().toISOString(),
+): string {
+	return `/**
+ * Gerado por Sauron v${getSauronVersion()}
+ * Timestamp: ${generatedAt}
+ * Nao edite manualmente.
+ * ${schema.info.title}
+ * OpenAPI spec version: ${schema.info.version}
+ */
+`;
 }
 
 function parseCommand(): "generate" | "init" {
@@ -368,12 +398,16 @@ async function main() {
 
 		// Determine output paths
 		const { modelsPath, servicePath } = getOutputPaths(options);
+		const fileHeader = createGeneratedFileHeader(schema);
 
 		// Generate TypeScript models
 		console.log("🔧 Generating TypeScript models...");
 		const { models, operationTypes, typeNameMap } =
 			createModelsWithOperationTypes(schema);
-		const formattedModels = await formatGeneratedFile(models.join("\n"), modelsPath);
+		const formattedModels = await formatGeneratedFile(
+			`${fileHeader}\n${models.join("\n")}`,
+			modelsPath,
+		);
 		writeFileSync(modelsPath, formattedModels);
 
 		let httpMethodsCount = 0;
@@ -395,7 +429,7 @@ async function main() {
 					true,
 				);
 				const formattedAngularService = await formatGeneratedFile(
-					angularService,
+					`${fileHeader}\n${angularService}`,
 					servicePath,
 				);
 				writeFileSync(servicePath, formattedAngularService);
@@ -416,7 +450,7 @@ async function main() {
 					usedTypes,
 				);
 				const formattedFetchService = await formatGeneratedFile(
-					fetchService,
+					`${fileHeader}\n${fetchService}`,
 					servicePath,
 				);
 				writeFileSync(servicePath, formattedFetchService);
@@ -1249,6 +1283,7 @@ export const sauronApi = new SauronApiClient();
 // Export functions for testing
 export {
 	createFetchHttpMethods,
+	createGeneratedFileHeader,
 	extractMethodParameters,
 	extractResponseType,
 	generateAngularService,
