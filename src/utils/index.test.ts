@@ -549,18 +549,31 @@ describe("OpenAPI to TypeScript Converter Utilities", () => {
 				},
 			};
 
-			const { methods } = createAngularHttpClientMethods(openApiSchema);
+			const { methods, paramsInterfaces } =
+				createAngularHttpClientMethods(openApiSchema);
 			const reportMethod = methods.find((m) => m.includes("PostReport"));
-			const auditMethod = methods.find((m) => m.includes("GetAuditWithParams"));
+			const auditMethod = methods.find((m) =>
+				m.includes("GetAuditWithParams"),
+			);
 
-			expect(reportMethod).toContain("createdAt?: string");
+			expect(reportMethod).toContain("params: PostReportParams");
 			expect(reportMethod).toContain(
-				"return this.httpClient.post<ReportDto>(\"/api/reports\", null, { params: { createdAt: createdAt } });",
+				'return this.httpClient.post<ReportDto>("/api/reports", null, { params: { ...params } });',
 			);
-			expect(auditMethod).toContain("from: string");
+			expect(auditMethod).toContain("params: GetAuditWithParamsParams");
 			expect(auditMethod).toContain(
-				"return this.httpClient.get<AuditDto>(\"/api/audits\", { params: { from: from } });",
+				'return this.httpClient.get<AuditDto>("/api/audits", { params: { ...params } });',
 			);
+
+			const reportInterface = paramsInterfaces.find((i) =>
+				i.includes("PostReportParams"),
+			);
+			expect(reportInterface).toContain("createdAt?: string;");
+
+			const auditInterface = paramsInterfaces.find((i) =>
+				i.includes("GetAuditWithParamsParams"),
+			);
+			expect(auditInterface).toContain("from: string;");
 		});
 
 		test("should import enum types used in query parameters", () => {
@@ -619,13 +632,23 @@ describe("OpenAPI to TypeScript Converter Utilities", () => {
 				},
 			};
 
-			const { methods, imports } =
+			const { methods, imports, paramsInterfaces } =
 				createAngularHttpClientMethods(openApiSchema);
 			const method = methods.find((m) =>
 				m.includes("PostContabilizarDocumentoContabilizarDocumentoCreate"),
 			);
 
-			expect(method).toContain("tipoOperacao?: TipoDeOperacaoContratoEnum");
+			expect(method).toContain(
+				"params: PostContabilizarDocumentoContabilizarDocumentoCreateParams",
+			);
+			const paramsInterface = paramsInterfaces.find((i) =>
+				i.includes(
+					"PostContabilizarDocumentoContabilizarDocumentoCreateParams",
+				),
+			);
+			expect(paramsInterface).toContain(
+				"tipoOperacao?: TipoDeOperacaoContratoEnum;",
+			);
 			expect(imports).toContain("TipoDeOperacaoContratoEnum");
 		});
 
@@ -674,7 +697,7 @@ describe("OpenAPI to TypeScript Converter Utilities", () => {
 
 			expect(method).toContain("Observable<AgenteContratoDto>");
 			expect(method).toContain(
-				"return this.httpClient.post<AgenteContratoDto>(\"/api/AgenteContrato\", body);",
+				'return this.httpClient.post<AgenteContratoDto>("/api/AgenteContrato", body);',
 			);
 			expect(imports).toContain("AgenteContratoDto");
 		});

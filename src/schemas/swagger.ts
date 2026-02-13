@@ -22,11 +22,9 @@ const HttpMethodSchema = z
 		tags: z.array(z.string()).optional(),
 		responses: z
 			.record(
-			z
-				.string()
-				.regex(/^(\d{3}|default)$/), // Chave é o código de status HTTP (ex: "200") ou "default" para Swagger 2.0
-			ResponseSchema,
-		)
+				z.string().regex(/^(\d{3}|default)$/), // Chave é o código de status HTTP (ex: "200") ou "default" para Swagger 2.0
+				ResponseSchema,
+			)
 			.optional(),
 		// Campos como 'parameters' e 'requestBody' seriam opcionais aqui
 	})
@@ -65,9 +63,7 @@ const InfoSchema = z
  * É um mapa (record) onde a chave é o path e o valor é o PathItemSchema.
  */
 export const PathsSchema = z.record(
-	z
-		.string()
-		.startsWith("/"), // A chave deve ser uma string de path (ex: "/users")
+	z.string().startsWith("/"), // A chave deve ser uma string de path (ex: "/users")
 	PathItemSchema,
 );
 
@@ -100,11 +96,15 @@ export const SwaggerBasicSchema = z
 		responses: z.record(z.string(), z.any()).optional(),
 		securityDefinitions: z.record(z.string(), z.any()).optional(),
 		security: z.array(z.any()).optional(),
-		tags: z.array(z.object({
-			name: z.string(),
-			description: z.string().optional(),
-			externalDocs: z.any().optional(),
-		})).optional(),
+		tags: z
+			.array(
+				z.object({
+					name: z.string(),
+					description: z.string().optional(),
+					externalDocs: z.any().optional(),
+				}),
+			)
+			.optional(),
 		externalDocs: z.any().optional(),
 		// Outros campos opcionais do Swagger 2.0
 	})

@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { parseArgs as parseCliArgs } from "util";
+import { parseArgs as parseCliArgs } from "node:util";
 import * as prettier from "prettier";
 import {
 	createAngularHttpClientMethods,
@@ -10,8 +10,8 @@ import {
 	type OpenApiOperation,
 	type OpenApiPath,
 	type OpenApiSchema,
-	type OperationTypeMap,
 	type OperationTypeInfo,
+	type OperationTypeMap,
 	readJsonFile,
 	verifySwaggerComposition,
 } from "./utils";
@@ -40,7 +40,10 @@ const DEFAULT_SAURON_VERSION = "1.0.0";
 import type { z } from "zod";
 import type { SwaggerOrOpenAPISchema } from "./schemas/swagger";
 
-async function formatGeneratedFile(content: string, filePath: string): Promise<string> {
+async function formatGeneratedFile(
+	content: string,
+	filePath: string,
+): Promise<string> {
 	try {
 		return await prettier.format(content, { filepath: filePath });
 	} catch (error) {
@@ -57,7 +60,10 @@ function getSauronVersion(): string {
 		const packageJsonPath = resolve(import.meta.dir, "..", "package.json");
 		const packageJsonContent = readFileSync(packageJsonPath, "utf-8");
 		const packageJson = JSON.parse(packageJsonContent) as { version?: unknown };
-		if (typeof packageJson.version === "string" && packageJson.version.length > 0) {
+		if (
+			typeof packageJson.version === "string" &&
+			packageJson.version.length > 0
+		) {
 			return packageJson.version;
 		}
 	} catch {
@@ -216,7 +222,9 @@ Without flags, generates only TypeScript models.
 `);
 }
 
-async function initConfigFile(configFilePath = DEFAULT_CONFIG_FILE): Promise<void> {
+async function initConfigFile(
+	configFilePath = DEFAULT_CONFIG_FILE,
+): Promise<void> {
 	const resolvedConfigPath = resolve(configFilePath);
 	if (existsSync(resolvedConfigPath)) {
 		console.warn(`⚠️  Config file already exists: ${configFilePath}`);
@@ -237,7 +245,10 @@ export default {
 } satisfies SauronConfig;
 `;
 
-	const formattedTemplate = await formatGeneratedFile(template, resolvedConfigPath);
+	const formattedTemplate = await formatGeneratedFile(
+		template,
+		resolvedConfigPath,
+	);
 	writeFileSync(resolvedConfigPath, formattedTemplate);
 	console.log(`✅ Created config file: ${configFilePath}`);
 }
@@ -377,7 +388,9 @@ async function main() {
 		);
 		if (loadedConfig) {
 			options = mergeOptionsWithConfig(cliOptions, loadedConfig);
-			console.log(`⚙️  Using config file: ${options.config || DEFAULT_CONFIG_FILE}`);
+			console.log(
+				`⚙️  Using config file: ${options.config || DEFAULT_CONFIG_FILE}`,
+			);
 		}
 
 		let config: unknown;
@@ -417,16 +430,16 @@ async function main() {
 			if (options.angular && isAngularProject()) {
 				// Generate Angular HTTP Client service
 				console.log("🔧 Generating Angular HTTP Client service...");
-				const { methods: angularMethods, imports: angularImports } =
-					createAngularHttpClientMethods(
-						schema,
-						operationTypes,
-						typeNameMap,
-					);
+				const {
+					methods: angularMethods,
+					imports: angularImports,
+					paramsInterfaces: angularParamsInterfaces,
+				} = createAngularHttpClientMethods(schema, operationTypes, typeNameMap);
 				const angularService = generateAngularService(
 					angularMethods,
 					angularImports,
 					true,
+					angularParamsInterfaces,
 				);
 				const formattedAngularService = await formatGeneratedFile(
 					`${fileHeader}\n${angularService}`,
@@ -438,7 +451,10 @@ async function main() {
 				// Generate fetch-based HTTP methods
 				console.log("🔧 Generating fetch-based HTTP methods...");
 				const usedTypes = new Set<string>();
-				const fetchMethods = createFetchHttpMethods(
+				const {
+					methods: fetchMethods,
+					paramsInterfaces: fetchParamsInterfaces,
+				} = createFetchHttpMethods(
 					schema,
 					usedTypes,
 					operationTypes,
@@ -448,6 +464,7 @@ async function main() {
 					fetchMethods,
 					modelsPath,
 					usedTypes,
+					fetchParamsInterfaces,
 				);
 				const formattedFetchService = await formatGeneratedFile(
 					`${fileHeader}\n${fetchService}`,
@@ -489,7 +506,8 @@ async function main() {
 function generateAngularService(
 	methods: string[],
 	imports: string[],
-	isAngularProject: boolean,
+	_isAngularProject: boolean,
+	paramsInterfaces: string[] = [],
 ): string {
 	// Generate import statement for types
 	let importStatement = "";
@@ -500,11 +518,16 @@ function generateAngularService(
 		importStatement = `import { ${importList} } from "${importPath}";\n`;
 	}
 
+	const interfacesBlock =
+		paramsInterfaces.length > 0
+			? paramsInterfaces.join("\n\n") + "\n\n"
+			: "";
+
 	const serviceTemplate = `import { Injectable, inject } from "@angular/core";
 import { HttpClient } from "@angular/common/http";
 import { Observable } from "rxjs";
 
-${importStatement}@Injectable({
+${importStatement}${interfacesBlock}@Injectable({
   providedIn: "root"
 })
 export class SauronApiService {
@@ -670,17 +693,19 @@ function convertParamSchemaToType(
 			return "{}";
 		}
 
-		const propertyDefinitions = entries.map(([propertyName, propertySchema]) => {
-			const propertyType = convertParamSchemaToType(
-				propertySchema,
-				typeNameMap,
-			);
-			const isRequired = hasExplicitRequiredList
-				? requiredProperties.includes(propertyName)
-				: true;
-			const optionalMarker = isRequired ? "" : "?";
-			return `${propertyName}${optionalMarker}: ${propertyType};`;
-		});
+		const propertyDefinitions = entries.map(
+			([propertyName, propertySchema]) => {
+				const propertyType = convertParamSchemaToType(
+					propertySchema,
+					typeNameMap,
+				);
+				const isRequired = hasExplicitRequiredList
+					? requiredProperties.includes(propertyName)
+					: true;
+				const optionalMarker = isRequired ? "" : "?";
+				return `${propertyName}${optionalMarker}: ${propertyType};`;
+			},
+		);
 
 		return `{ ${propertyDefinitions.join(" ")} }`;
 	}
@@ -717,7 +742,7 @@ function convertParamSchemaToType(
 
 function addParamTypeImports(paramTypes: string[], usedTypes: Set<string>) {
 	for (const type of paramTypes) {
-		const parts = type.split(/[\|&]/).map((part) => part.trim());
+		const parts = type.split(/[|&]/).map((part) => part.trim());
 		for (let part of parts) {
 			while (part.endsWith("[]")) {
 				part = part.slice(0, -2);
@@ -739,7 +764,7 @@ function addParamTypeImports(paramTypes: string[], usedTypes: Set<string>) {
 				continue;
 			}
 			if (
-				part.startsWith("\"") ||
+				part.startsWith('"') ||
 				part.startsWith("'") ||
 				part.startsWith("{") ||
 				/^[0-9]/.test(part)
@@ -763,7 +788,7 @@ function buildParameterInfo(
 			usedNames.add(base);
 			return base;
 		}
-		let candidate = `${base}${suffix}`;
+		const candidate = `${base}${suffix}`;
 		if (!usedNames.has(candidate)) {
 			usedNames.add(candidate);
 			return candidate;
@@ -828,12 +853,24 @@ function buildParameterInfo(
 	return { pathParams, queryParams, bodyParam };
 }
 
+function generateParamsInterface(
+	methodName: string,
+	queryParams: Array<{ name: string; required: boolean; type: string }>,
+): string {
+	const props = queryParams.map((param) => {
+		const optional = param.required ? "" : "?";
+		return `  ${param.name}${optional}: ${param.type};`;
+	});
+	return `export interface ${methodName}Params {\n${props.join("\n")}\n}`;
+}
+
 function extractMethodParameters(
 	path: string,
 	operation: OpenApiOperation,
 	typeInfo?: OperationTypeInfo,
-	components?: any,
+	_components?: any,
 	typeNameMap?: Map<string, string>,
+	methodName?: string,
 ): string {
 	const requiredParams: string[] = [];
 	const optionalParams: string[] = [];
@@ -847,11 +884,15 @@ function extractMethodParameters(
 		requiredParams.push(`${param.varName}: ${param.type}`);
 	}
 
-	for (const param of queryParams) {
-		if (param.required) {
-			requiredParams.push(`${param.varName}: ${param.type}`);
-		} else {
-			optionalParams.push(`${param.varName}?: ${param.type}`);
+	if (queryParams.length > 0 && methodName) {
+		requiredParams.push(`params: ${methodName}Params`);
+	} else {
+		for (const param of queryParams) {
+			if (param.required) {
+				requiredParams.push(`${param.varName}: ${param.type}`);
+			} else {
+				optionalParams.push(`${param.varName}?: ${param.type}`);
+			}
 		}
 	}
 
@@ -972,16 +1013,17 @@ function createFetchHttpMethods(
 	usedTypes?: Set<string>,
 	operationTypes?: OperationTypeMap,
 	typeNameMap?: Map<string, string>,
-): string[] {
+): { methods: string[]; paramsInterfaces: string[] } {
 	if (!data.paths) {
-		return [];
+		return { methods: [], paramsInterfaces: [] };
 	}
 
 	const methods: string[] = [];
+	const paramsInterfaces: string[] = [];
 	const pathEntries = Object.entries(data.paths);
 
 	for (const [path, pathItem] of pathEntries) {
-		const pathMethods = generateFetchMethodsForPath(
+		const result = generateFetchMethodsForPath(
 			path,
 			pathItem as OpenApiPath,
 			data.components,
@@ -989,10 +1031,11 @@ function createFetchHttpMethods(
 			operationTypes,
 			typeNameMap,
 		);
-		methods.push(...pathMethods);
+		methods.push(...result.methods);
+		paramsInterfaces.push(...result.paramsInterfaces);
 	}
 
-	return methods;
+	return { methods, paramsInterfaces };
 }
 
 /**
@@ -1008,8 +1051,9 @@ function generateFetchMethodsForPath(
 	usedTypes?: Set<string>,
 	operationTypes?: OperationTypeMap,
 	typeNameMap?: Map<string, string>,
-): string[] {
+): { methods: string[]; paramsInterfaces: string[] } {
 	const methods: string[] = [];
+	const paramsInterfaces: string[] = [];
 	const httpMethods = [
 		"get",
 		"post",
@@ -1022,7 +1066,7 @@ function generateFetchMethodsForPath(
 
 	for (const httpMethod of httpMethods) {
 		if (operations[httpMethod]) {
-			const method = generateFetchMethod(
+			const result = generateFetchMethod(
 				path,
 				httpMethod,
 				operations[httpMethod],
@@ -1031,13 +1075,16 @@ function generateFetchMethodsForPath(
 				operationTypes,
 				typeNameMap,
 			);
-			if (method) {
-				methods.push(method);
+			if (result) {
+				methods.push(result.method);
+				if (result.paramsInterface) {
+					paramsInterfaces.push(result.paramsInterface);
+				}
 			}
 		}
 	}
 
-	return methods;
+	return { methods, paramsInterfaces };
 }
 
 /**
@@ -1055,7 +1102,7 @@ function generateFetchMethod(
 	usedTypes?: Set<string>,
 	operationTypes?: OperationTypeMap,
 	typeNameMap?: Map<string, string>,
-): string | null {
+): { method: string; paramsInterface?: string } | null {
 	try {
 		const methodName = generateMethodName(path, httpMethod, operation);
 		const paramInfo = buildParameterInfo(path, operation, typeNameMap);
@@ -1066,6 +1113,7 @@ function generateFetchMethod(
 			typeInfo,
 			components,
 			typeNameMap,
+			methodName,
 		);
 
 		// Extract response type from operation
@@ -1104,26 +1152,45 @@ function generateFetchMethod(
 			addParamTypeImports(paramTypes, usedTypes);
 		}
 
-		// Handle query parameters first
-		const queryParams =
-			paramInfo.queryParams || [];
+		// Generate params interface if needed
+		let paramsInterface: string | undefined;
+		const queryParams = paramInfo.queryParams || [];
 		const hasQueryParams = queryParams.length > 0;
+		if (hasQueryParams) {
+			paramsInterface = generateParamsInterface(methodName, queryParams);
+		}
+
+		// Handle query parameters first
 		const hasPathParams = path.includes("{");
 
 		let url: string;
 
 		if (hasQueryParams) {
-			const queryObject = queryParams
-				.map((param) => `${param.name}: ${param.varName}`)
-				.join(", ");
-			const queryStringLine = `const queryString = qs.stringify({ ${queryObject} }, { skipNull: true, skipEmptyString: true });`;
+			const queryStringLine = `const queryString = qs.stringify({ ...params }, { skipNull: true, skipEmptyString: true });`;
 
 			if (hasPathParams) {
 				const pathWithParams = path.replace(/\{([^}]+)\}/g, "${$1}");
 				url = `\`${
 					pathWithParams
-				}\${queryString ? \`?\${queryString}\` : \"\"}\``;
-				return buildFetchMethodWithQueryString(
+				}\${queryString ? \`?\${queryString}\` : ""}\``;
+				return {
+					method: buildFetchMethodWithQueryString(
+						methodName,
+						parameters,
+						returnType,
+						url,
+						operation,
+						paramInfo,
+						queryStringLine,
+						httpMethod,
+					),
+					paramsInterface,
+				};
+			}
+
+			url = `\`${path}\${queryString ? \`?\${queryString}\` : ""}\``;
+			return {
+				method: buildFetchMethodWithQueryString(
 					methodName,
 					parameters,
 					returnType,
@@ -1132,20 +1199,9 @@ function generateFetchMethod(
 					paramInfo,
 					queryStringLine,
 					httpMethod,
-				);
-			}
-
-			url = `\`${path}\${queryString ? \`?\${queryString}\` : \"\"}\``;
-			return buildFetchMethodWithQueryString(
-				methodName,
-				parameters,
-				returnType,
-				url,
-				operation,
-				paramInfo,
-				queryStringLine,
-				httpMethod,
-			);
+				),
+				paramsInterface,
+			};
 		}
 
 		// Build URL based on parameters
@@ -1175,7 +1231,8 @@ function generateFetchMethod(
 
 		const optionsString = fetchOptions.join(",\n    ");
 
-		return `  async ${methodName}(${parameters}): ${returnType} {
+		return {
+			method: `  async ${methodName}(${parameters}): ${returnType} {
     const response = await fetch(${url}, {
       ${optionsString}
     });
@@ -1185,7 +1242,9 @@ function generateFetchMethod(
     }
 
     return await response.json();
-  }`;
+  }`,
+			paramsInterface,
+		};
 	} catch (error) {
 		console.warn(
 			`Warning: Could not generate fetch method for ${httpMethod.toUpperCase()} ${path}:`,
@@ -1246,10 +1305,8 @@ function generateFetchService(
 	methods: string[],
 	_modelsPath: string,
 	usedTypes: Set<string>,
+	paramsInterfaces: string[] = [],
 ): string {
-	// Calculate relative import path from service to models
-	const _modelsRelativePath = "./models";
-
 	// Generate import statement for types
 	let importStatement = "";
 	if (usedTypes.size > 0) {
@@ -1259,9 +1316,14 @@ function generateFetchService(
 		importStatement = `import { ${importList} } from "${importPath}";\n`;
 	}
 
+	const interfacesBlock =
+		paramsInterfaces.length > 0
+			? paramsInterfaces.join("\n\n") + "\n\n"
+			: "";
+
 	const serviceTemplate = `// Generated fetch-based HTTP client
 import qs from "query-string";
-${importStatement}export class SauronApiClient {
+${importStatement}${interfacesBlock}export class SauronApiClient {
   private baseUrl = ''; // Configure your base URL
 
   constructor(baseUrl?: string) {

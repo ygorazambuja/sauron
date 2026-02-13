@@ -177,7 +177,8 @@ export function createModelsWithOperationTypes(
 	typeNameMap: TypeNameMap;
 } {
 	// Handle both OpenAPI 3.0+ (components.schemas) and Swagger 2.0 (definitions)
-	const schemas = (data as any).components?.schemas || (data as any).definitions;
+	const schemas =
+		(data as any).components?.schemas || (data as any).definitions;
 	const schemaEntries = schemas ? Object.entries(schemas) : [];
 	const typeDefinitions: string[] = [];
 	const { typeNameMap, usedTypeNames } = createTypeNameMap(schemas);
@@ -224,7 +225,7 @@ export function createAngularHttpClientMethods(
 	data: z.infer<typeof SwaggerOrOpenAPISchema>,
 	operationTypes?: OperationTypeMap,
 	typeNameMap?: TypeNameMap,
-): { methods: string[]; imports: string[] } {
+): { methods: string[]; imports: string[]; paramsInterfaces: string[] } {
 	if (!data.paths) {
 		throw new Error(
 			"No paths found in OpenAPI specification. Ensure your Swagger file has paths defined.",
@@ -232,23 +233,25 @@ export function createAngularHttpClientMethods(
 	}
 
 	const methods: string[] = [];
+	const paramsInterfaces: string[] = [];
 	const pathEntries = Object.entries(data.paths);
 	const usedMethodNames = new Set<string>();
 	const usedTypes = new Set<string>();
 	const resolvedTypeNameMap =
 		typeNameMap ??
 		createTypeNameMap(
-			((data as any).components?.schemas ||
-				(data as any).definitions) as Record<string, OpenApiSchema> | undefined,
+			((data as any).components?.schemas || (data as any).definitions) as
+				| Record<string, OpenApiSchema>
+				| undefined,
 		).typeNameMap;
 
 	if (pathEntries.length === 0) {
 		console.warn("Warning: No path definitions found in OpenAPI specification");
-		return { methods, imports: [] };
+		return { methods, imports: [], paramsInterfaces: [] };
 	}
 
 	for (const [path, pathItem] of pathEntries) {
-		const pathMethods = generateMethodsForPath(
+		const result = generateMethodsForPath(
 			path,
 			pathItem as OpenApiPath,
 			usedMethodNames,
@@ -257,13 +260,14 @@ export function createAngularHttpClientMethods(
 			operationTypes,
 			resolvedTypeNameMap,
 		);
-		methods.push(...pathMethods);
+		methods.push(...result.methods);
+		paramsInterfaces.push(...result.paramsInterfaces);
 	}
 
 	// Generate imports for used types
 	const imports = Array.from(usedTypes).sort();
 
-	return { methods, imports };
+	return { methods, imports, paramsInterfaces };
 }
 
 function toPascalCase(value: string): string {
@@ -290,16 +294,14 @@ function sanitizeTypeName(value: string): string {
 	return sanitized || "Type";
 }
 
-function resolveTypeName(
-	value: string,
-	typeNameMap?: TypeNameMap,
-): string {
+function resolveTypeName(value: string, typeNameMap?: TypeNameMap): string {
 	return typeNameMap?.get(value) ?? sanitizeTypeName(value);
 }
 
-function createTypeNameMap(
-	schemas?: Record<string, OpenApiSchema>,
-): { typeNameMap: TypeNameMap; usedTypeNames: Set<string> } {
+function createTypeNameMap(schemas?: Record<string, OpenApiSchema>): {
+	typeNameMap: TypeNameMap;
+	usedTypeNames: Set<string>;
+} {
 	const typeNameMap: TypeNameMap = new Map();
 	const usedTypeNames = new Set<string>();
 
@@ -519,8 +521,9 @@ function generateMethodsForPath(
 	usedTypes: Set<string>,
 	operationTypes?: OperationTypeMap,
 	typeNameMap?: TypeNameMap,
-): string[] {
+): { methods: string[]; paramsInterfaces: string[] } {
 	const methods: string[] = [];
+	const paramsInterfaces: string[] = [];
 	const httpMethods = [
 		"get",
 		"post",
@@ -533,7 +536,7 @@ function generateMethodsForPath(
 
 	for (const httpMethod of httpMethods) {
 		if (operations[httpMethod]) {
-			const method = generateHttpMethod(
+			const result = generateHttpMethod(
 				path,
 				httpMethod,
 				operations[httpMethod],
@@ -543,13 +546,16 @@ function generateMethodsForPath(
 				operationTypes,
 				typeNameMap,
 			);
-			if (method) {
-				methods.push(method);
+			if (result) {
+				methods.push(result.method);
+				if (result.paramsInterface) {
+					paramsInterfaces.push(result.paramsInterface);
+				}
 			}
 		}
 	}
 
-	return methods;
+	return { methods, paramsInterfaces };
 }
 
 /**
@@ -572,7 +578,7 @@ function generateHttpMethod(
 	usedTypes: Set<string>,
 	operationTypes?: OperationTypeMap,
 	typeNameMap?: TypeNameMap,
-): string | null {
+): { method: string; paramsInterface?: string } | null {
 	try {
 		const methodName = generateMethodName(path, httpMethod, operation);
 
@@ -593,6 +599,7 @@ function generateHttpMethod(
 			typeInfo,
 			components,
 			typeNameMap,
+			uniqueMethodName,
 		);
 
 		// Extract response type from operation
@@ -646,9 +653,17 @@ function generateHttpMethod(
 		];
 		addParamTypeImports(paramTypes, usedTypes);
 
-		return `  ${uniqueMethodName}(${parameters}): ${returnType} {
+		let paramsInterface: string | undefined;
+		if (paramInfo.queryParams.length > 0) {
+			paramsInterface = generateParamsInterface(uniqueMethodName, paramInfo.queryParams);
+		}
+
+		return {
+			method: `  ${uniqueMethodName}(${parameters}): ${returnType} {
 ${methodBody}
-  }`;
+  }`,
+			paramsInterface,
+		};
 	} catch (error) {
 		console.warn(
 			`Warning: Could not generate method for ${httpMethod.toUpperCase()} ${path}:`,
@@ -740,7 +755,7 @@ function buildParameterInfo(
 			usedNames.add(base);
 			return base;
 		}
-		let candidate = `${base}${suffix}`;
+		const candidate = `${base}${suffix}`;
 		if (!usedNames.has(candidate)) {
 			usedNames.add(candidate);
 			return candidate;
@@ -809,12 +824,24 @@ function buildParameterInfo(
 	return { pathParams, queryParams, bodyParam };
 }
 
+function generateParamsInterface(
+	methodName: string,
+	queryParams: Array<{ name: string; required: boolean; type: string }>,
+): string {
+	const props = queryParams.map((param) => {
+		const optional = param.required ? "" : "?";
+		return `  ${param.name}${optional}: ${param.type};`;
+	});
+	return `export interface ${methodName}Params {\n${props.join("\n")}\n}`;
+}
+
 function extractMethodParameters(
 	path: string,
 	operation: OpenApiOperation,
 	typeInfo?: OperationTypeInfo,
 	components?: any,
 	typeNameMap?: TypeNameMap,
+	methodName?: string,
 ): string {
 	const params: string[] = [];
 	const optionalParams: string[] = [];
@@ -829,11 +856,15 @@ function extractMethodParameters(
 		params.push(`${param.varName}: ${param.type}`);
 	}
 
-	for (const param of queryParams) {
-		if (param.required) {
-			params.push(`${param.varName}: ${param.type}`);
-		} else {
-			optionalParams.push(`${param.varName}?: ${param.type}`);
+	if (queryParams.length > 0 && methodName) {
+		params.push(`params: ${methodName}Params`);
+	} else {
+		for (const param of queryParams) {
+			if (param.required) {
+				params.push(`${param.varName}: ${param.type}`);
+			} else {
+				optionalParams.push(`${param.varName}?: ${param.type}`);
+			}
 		}
 	}
 
@@ -850,7 +881,7 @@ function extractMethodParameters(
 
 function extractRequestType(
 	operation: OpenApiOperation,
-	components?: any,
+	_components?: any,
 	typeNameMap?: TypeNameMap,
 ): string | undefined {
 	const schema = getPreferredContentSchema(operation.requestBody?.content);
@@ -972,10 +1003,7 @@ function generateMethodBody(
 	}
 
 	if (hasQueryParams) {
-		const queryString = queryParams
-			.map((param) => `${param.name}: ${param.varName}`)
-			.join(", ");
-		args.push(`{ params: { ${queryString} } }`);
+		args.push(`{ params: { ...params } }`);
 	}
 
 	return `    return ${httpClientMethod}(${args.join(", ")});`;
@@ -1006,8 +1034,9 @@ function convertParamSchemaToTypeScript(
 			return "any";
 		}
 
-		const referencedSchema =
-			components?.schemas?.[referencedTypeName] as OpenApiSchema | undefined;
+		const referencedSchema = components?.schemas?.[referencedTypeName] as
+			| OpenApiSchema
+			| undefined;
 		if (
 			referencedSchema?.type === "string" &&
 			referencedSchema.format === "date-time"
@@ -1074,7 +1103,7 @@ function convertParamSchemaToTypeScript(
 
 function addParamTypeImports(paramTypes: string[], usedTypes: Set<string>) {
 	for (const type of paramTypes) {
-		const parts = type.split(/[\|&]/).map((part) => part.trim());
+		const parts = type.split(/[|&]/).map((part) => part.trim());
 		for (let part of parts) {
 			while (part.endsWith("[]")) {
 				part = part.slice(0, -2);
@@ -1096,7 +1125,7 @@ function addParamTypeImports(paramTypes: string[], usedTypes: Set<string>) {
 				continue;
 			}
 			if (
-				part.startsWith("\"") ||
+				part.startsWith('"') ||
 				part.startsWith("'") ||
 				part.startsWith("{") ||
 				/^[0-9]/.test(part)
@@ -1190,17 +1219,19 @@ function convertSchemaToTypeScript(
 			return "{}";
 		}
 
-		const propertyDefinitions = entries.map(([propertyName, propertySchema]) => {
+		const propertyDefinitions = entries.map(
+			([propertyName, propertySchema]) => {
 				const propertyType = convertSchemaToTypeScript(
 					propertySchema,
 					typeNameMap,
 				);
-			const isRequired = hasExplicitRequiredList
-				? requiredProperties.includes(propertyName)
-				: true;
-			const optionalMarker = isRequired ? "" : "?";
-			return `${propertyName}${optionalMarker}: ${propertyType};`;
-		});
+				const isRequired = hasExplicitRequiredList
+					? requiredProperties.includes(propertyName)
+					: true;
+				const optionalMarker = isRequired ? "" : "?";
+				return `${propertyName}${optionalMarker}: ${propertyType};`;
+			},
+		);
 
 		return `{ ${propertyDefinitions.join(" ")} }`;
 	}
