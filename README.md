@@ -12,6 +12,7 @@ Este projeto converte automaticamente schemas OpenAPI/Swagger JSON em definiçõ
 - ✅ **Referências ($ref)**: Resolve referências entre schemas
 - ✅ **Datas**: Converte `format: "date-time"` para tipo `Date`
 - ✅ **Propriedades Obrigatórias**: Todas as propriedades definidas são obrigatórias por padrão
+- ✅ **Relatório de definições ausentes**: Gera `missing-swagger-definitions.json` com os pontos que viraram `any` nas rotas HTTP
 
 ## Como Usar
 
@@ -65,6 +66,7 @@ O comando irá:
 5. **Com `--angular --http`**: Detectar projeto Angular e gerar serviço Angular
 6. **Com `--http` (sem Angular)**: Gerar cliente fetch-based
 7. Salvar nos diretórios apropriados (`outputs/` ou `src/app/sauron/`)
+8. Gerar relatório de definições ausentes em `missing-swagger-definitions.json` (quando `--http` está ativo)
 
 ### Flags Disponíveis
 
@@ -127,8 +129,18 @@ src/
     └── swagger.ts     # Schema Zod para validação OpenAPI
 
 outputs/
-└── models/
-    └── index.ts       # Arquivo gerado com tipos TypeScript
+├── models/
+│   └── index.ts                            # Arquivo gerado com tipos TypeScript
+└── http-client/                            # Quando --http (sem Angular)
+    ├── sauron-api.client.ts               # Cliente fetch
+    └── missing-swagger-definitions.json   # Relatório de definições ausentes
+
+src/app/sauron/
+├── models/
+│   └── index.ts                            # Arquivo gerado com tipos TypeScript
+└── angular-http-client/                    # Quando --angular --http
+    ├── sauron-api.service.ts              # Serviço Angular
+    └── missing-swagger-definitions.json   # Relatório de definições ausentes
 ```
 
 ## Exemplo de Saída
@@ -308,6 +320,7 @@ sauron swagger.json --http
 ```
 
 Gera models + cliente fetch-based em `outputs/http-client/sauron-api.client.ts`.
+Também gera `outputs/http-client/missing-swagger-definitions.json`.
 
 ```typescript
 // Exemplo de uso
@@ -351,6 +364,7 @@ sauron swagger.json --angular --http
 ```
 
 Gera models + serviço Angular em `src/app/sauron/angular-http-client/sauron-api.service.ts`.
+Também gera `src/app/sauron/angular-http-client/missing-swagger-definitions.json`.
 
 ```typescript
 // Exemplo de uso
@@ -412,6 +426,37 @@ export class MyComponent {
       console.log(data);
     });
   }
+}
+```
+
+## Relatório de Definições Ausentes
+
+Quando `--http` está habilitado (fetch ou Angular), o CLI gera automaticamente um arquivo
+`missing-swagger-definitions.json` ao lado do cliente/serviço HTTP.
+
+Esse relatório lista os pontos da especificação Swagger/OpenAPI que resultaram em `any` na
+camada HTTP gerada, para facilitar correções no contrato da API.
+
+### Estrutura do arquivo
+
+- `generatedAt`: data/hora de geração (ISO string)
+- `totalIssues`: total de ocorrências encontradas
+- `summary.pathParameters`: total de problemas em parâmetros de path
+- `summary.queryParameters`: total de problemas em parâmetros de query
+- `summary.requestBodies`: total de problemas em corpos de requisição
+- `summary.responseBodies`: total de problemas em corpos de resposta
+- `issues`: lista detalhada de ocorrências
+
+### Exemplo de item em `issues`
+
+```json
+{
+  "path": "/api/users/{id}",
+  "method": "GET",
+  "location": "path.parameter",
+  "field": "id",
+  "reason": "Path parameter schema is missing or unresolved.",
+  "recommendedDefinition": "Define parameter.schema with a primitive type, enum, object, array, or valid $ref."
 }
 ```
 
