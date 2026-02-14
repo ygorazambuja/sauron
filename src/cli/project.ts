@@ -47,21 +47,7 @@ export function getOutputPaths(options: CliOptions): {
 	modelsPath: string;
 	servicePath: string | undefined;
 } {
-	let basePath: string;
-
-	if (options.output) {
-		basePath = resolve(options.output);
-	} else if (options.angular && isAngularProject()) {
-		basePath = "src/app/sauron";
-		console.log("✅ Angular project detected! Generating in src/app/sauron/");
-	} else {
-		basePath = "outputs";
-		if (options.angular) {
-			console.warn(
-				"⚠️  --angular flag used but Angular project not detected. Generating in outputs/ instead.",
-			);
-		}
-	}
+	const basePath = resolveOutputBasePath(options, options.angular);
 
 	mkdirSync(join(basePath, "models"), { recursive: true });
 
@@ -87,4 +73,41 @@ export function getOutputPaths(options: CliOptions): {
 		modelsPath: join(basePath, "models", "index.ts"),
 		servicePath,
 	};
+}
+
+/**
+ * Resolve output base path.
+ * @param options Input parameter `options`.
+ * @param preferAngularOutput Input parameter `preferAngularOutput`.
+ * @returns Resolve output base path output as `string`.
+ * @example
+ * ```ts
+ * const result = resolveOutputBasePath(
+ * 	{ input: "swagger.json", angular: false, http: false, help: false },
+ * 	false,
+ * );
+ * // result: string
+ * ```
+ */
+export function resolveOutputBasePath(
+	options: CliOptions,
+	preferAngularOutput: boolean,
+): string {
+	if (options.output) {
+		return resolve(options.output);
+	}
+
+	const angularDetected = isAngularProject();
+	if (preferAngularOutput && angularDetected) {
+		console.log("✅ Angular project detected! Generating in src/app/sauron/");
+		return "src/app/sauron";
+	}
+
+	if (options.angular && !angularDetected) {
+		console.warn(
+			"⚠️  --angular flag used but Angular project not detected. Generating in outputs/ instead.",
+		);
+	}
+
+	return "outputs";
 }

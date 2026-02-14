@@ -24,6 +24,7 @@ describe("CLI main", () => {
 	let originalArgv: string[];
 	let logSpy: ReturnType<typeof spyOn>;
 	let errorSpy: ReturnType<typeof spyOn>;
+	let warnSpy: ReturnType<typeof spyOn>;
 
 	beforeEach(() => {
 		tempDir = mkdtempSync(join(tmpdir(), "sauron-cli-main-test-"));
@@ -32,11 +33,13 @@ describe("CLI main", () => {
 		process.chdir(tempDir);
 		logSpy = spyOn(console, "log").mockImplementation(mock(() => {}));
 		errorSpy = spyOn(console, "error").mockImplementation(mock(() => {}));
+		warnSpy = spyOn(console, "warn").mockImplementation(mock(() => {}));
 	});
 
 	afterEach(() => {
 		logSpy.mockRestore();
 		errorSpy.mockRestore();
+		warnSpy.mockRestore();
 		process.chdir(originalCwd);
 		Bun.argv = originalArgv;
 		rmSync(tempDir, { recursive: true, force: true });
@@ -95,6 +98,172 @@ describe("CLI main", () => {
 		expect(
 			existsSync(join("outputs", "http-client", "missing-swagger-definitions.json")),
 		).toBe(true);
+		expect(
+			existsSync(join("outputs", "http-client", "type-coverage-report.json")),
+		).toBe(true);
+	});
+
+	test("should generate fetch files when using explicit fetch plugin", async () => {
+		const openApiSchema = {
+			openapi: "3.0.4",
+			info: { title: "Plugin Fetch API", version: "1.0.0" },
+			paths: {
+				"/api/status": {
+					get: {
+						responses: {
+							"200": {
+								description: "Success",
+								content: {
+									"application/json": {
+										schema: {
+											type: "object",
+											properties: { ok: { type: "boolean" } },
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		};
+
+		writeFileSync("swagger.json", JSON.stringify(openApiSchema));
+		Bun.argv = [
+			"bun",
+			"index.js",
+			"--plugin",
+			"fetch",
+			"--input",
+			"swagger.json",
+		];
+
+		await main();
+
+		expect(existsSync(join("outputs", "models", "index.ts"))).toBe(true);
+		expect(
+			existsSync(join("outputs", "http-client", "sauron-api.client.ts")),
+		).toBe(true);
+		expect(
+			existsSync(join("outputs", "http-client", "missing-swagger-definitions.json")),
+		).toBe(true);
+		expect(
+			existsSync(join("outputs", "http-client", "type-coverage-report.json")),
+		).toBe(true);
+	});
+
+	test("should generate axios client when using explicit axios plugin", async () => {
+		const openApiSchema = {
+			openapi: "3.0.4",
+			info: { title: "Plugin Axios API", version: "1.0.0" },
+			paths: {
+				"/api/status": {
+					get: {
+						responses: {
+							"200": {
+								description: "Success",
+								content: {
+									"application/json": {
+										schema: {
+											type: "object",
+											properties: { ok: { type: "boolean" } },
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		};
+
+		writeFileSync("swagger.json", JSON.stringify(openApiSchema));
+		Bun.argv = [
+			"bun",
+			"index.js",
+			"--plugin",
+			"axios",
+			"--input",
+			"swagger.json",
+		];
+
+		await main();
+
+		const axiosClientPath = join(
+			"outputs",
+			"http-client",
+			"sauron-api.axios-client.ts",
+		);
+		const reportPath = join(
+			"outputs",
+			"http-client",
+			"missing-swagger-definitions.axios.json",
+		);
+		const coverageReportPath = join(
+			"outputs",
+			"http-client",
+			"type-coverage-report.axios.json",
+		);
+		expect(existsSync(join("outputs", "models", "index.ts"))).toBe(true);
+		expect(existsSync(axiosClientPath)).toBe(true);
+		expect(existsSync(reportPath)).toBe(true);
+		expect(existsSync(coverageReportPath)).toBe(true);
+
+		const axiosClientContent = readFileSync(axiosClientPath, "utf-8");
+		expect(axiosClientContent).toContain('import axios');
+		expect(axiosClientContent).toContain("fetchWithAxios");
+	});
+
+	test("should prioritize explicit plugin over --http/--angular aliases", async () => {
+		writeFileSync("angular.json", "{}");
+		writeFileSync(
+			"swagger.json",
+			JSON.stringify({
+				openapi: "3.0.4",
+				info: { title: "Alias Priority API", version: "1.0.0" },
+				paths: {
+					"/api/status": {
+						get: {
+							responses: {
+								"200": {
+									description: "Success",
+								},
+							},
+						},
+					},
+				},
+			}),
+		);
+		Bun.argv = [
+			"bun",
+			"index.js",
+			"--plugin",
+			"fetch",
+			"--http",
+			"--angular",
+			"--input",
+			"swagger.json",
+		];
+
+		await main();
+
+		expect(
+			existsSync(join("outputs", "http-client", "sauron-api.client.ts")),
+		).toBe(true);
+		expect(
+			existsSync(
+				join(
+					"src",
+					"app",
+					"sauron",
+					"angular-http-client",
+					"sauron-api.service.ts",
+				),
+			),
+		).toBe(false);
+		expect(logSpy).toHaveBeenCalledWith(
+			expect.stringContaining("--plugin provided"),
+		);
 	});
 
 	test("should generate files from URL and merge options from config", async () => {
@@ -144,6 +313,9 @@ describe("CLI main", () => {
 		).toBe(true);
 		expect(
 			existsSync(join("outputs", "http-client", "missing-swagger-definitions.json")),
+		).toBe(true);
+		expect(
+			existsSync(join("outputs", "http-client", "type-coverage-report.json")),
 		).toBe(true);
 		expect(logSpy).toHaveBeenCalledWith(
 			expect.stringContaining("⚙️  Using config file:"),
@@ -220,6 +392,17 @@ describe("CLI main", () => {
 				),
 			),
 		).toBe(true);
+		expect(
+			existsSync(
+				join(
+					"src",
+					"app",
+					"sauron",
+					"angular-http-client",
+					"type-coverage-report.json",
+				),
+			),
+		).toBe(true);
 		const serviceContent = readFileSync(
 			join(
 				"src",
@@ -231,6 +414,131 @@ describe("CLI main", () => {
 			"utf-8",
 		);
 		expect(serviceContent).toContain("@Injectable");
+	});
+
+	test("should fallback to fetch output when --http --angular is used outside Angular project", async () => {
+		writeFileSync(
+			"swagger.json",
+			JSON.stringify({
+				openapi: "3.0.3",
+				info: { title: "Legacy Fallback API", version: "1.0.0" },
+				paths: {
+					"/api/health": {
+						get: {
+							responses: {
+								"200": {
+									description: "Success",
+								},
+							},
+						},
+					},
+				},
+			}),
+		);
+
+		Bun.argv = [
+			"bun",
+			"index.js",
+			"--http",
+			"--angular",
+			"--input",
+			"swagger.json",
+		];
+		await main();
+
+		expect(
+			existsSync(join("outputs", "http-client", "sauron-api.client.ts")),
+		).toBe(true);
+		expect(
+			existsSync(join("outputs", "http-client", "missing-swagger-definitions.json")),
+		).toBe(true);
+		expect(
+			existsSync(join("outputs", "http-client", "type-coverage-report.json")),
+		).toBe(true);
+		expect(warnSpy).toHaveBeenCalledWith(
+			expect.stringContaining("--angular flag used but Angular project not detected"),
+		);
+	});
+
+	test("should generate Angular service when using explicit angular plugin in Angular project", async () => {
+		writeFileSync("angular.json", "{}");
+		writeFileSync(
+			"swagger.json",
+			JSON.stringify({
+				openapi: "3.0.3",
+				info: { title: "Angular Plugin API", version: "1.0.0" },
+				paths: {
+					"/api/users": {
+						get: {
+							responses: {
+								"200": {
+									description: "Success",
+									content: {
+										"application/json": {
+											schema: { $ref: "#/components/schemas/User" },
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				components: {
+					schemas: {
+						User: { type: "object", properties: { id: { type: "integer" } } },
+					},
+				},
+			}),
+		);
+
+		Bun.argv = ["bun", "index.js", "--plugin", "angular", "--input", "swagger.json"];
+		await main();
+
+		expect(existsSync(join("src", "app", "sauron", "models", "index.ts"))).toBe(
+			true,
+		);
+		expect(
+			existsSync(
+				join(
+					"src",
+					"app",
+					"sauron",
+					"angular-http-client",
+					"sauron-api.service.ts",
+				),
+			),
+		).toBe(true);
+	});
+
+	test("should warn and fallback to fetch when angular plugin runs outside Angular project", async () => {
+		writeFileSync(
+			"swagger.json",
+			JSON.stringify({
+				openapi: "3.0.3",
+				info: { title: "Fallback API", version: "1.0.0" },
+				paths: {
+					"/api/users": {
+						get: {
+							responses: {
+								"200": {
+									description: "Success",
+								},
+							},
+						},
+					},
+				},
+			}),
+		);
+
+		Bun.argv = ["bun", "index.js", "--plugin", "angular", "--input", "swagger.json"];
+		await main();
+
+		expect(
+			existsSync(join("outputs", "http-client", "sauron-api.client.ts")),
+		).toBe(true);
+		expect(warnSpy).toHaveBeenCalledWith(
+			expect.stringContaining("Angular plugin requested"),
+		);
 	});
 
 	test("should handle non-object configuration and exit with code 1", async () => {

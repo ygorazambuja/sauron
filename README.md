@@ -12,7 +12,10 @@ Este projeto converte automaticamente schemas OpenAPI/Swagger JSON em definiçõ
 - ✅ **Referências ($ref)**: Resolve referências entre schemas
 - ✅ **Datas**: Converte `format: "date-time"` para tipo `Date`
 - ✅ **Propriedades Obrigatórias**: Todas as propriedades definidas são obrigatórias por padrão
-- ✅ **Relatório de definições ausentes**: Gera `missing-swagger-definitions.json` com os pontos que viraram `any` nas rotas HTTP
+- ✅ **Plugin system para geradores HTTP**: Plugins built-in `fetch`, `angular` e `axios`
+- ✅ **Seleção explícita de plugin**: `--plugin <id>` (aceita múltiplos)
+- ✅ **Compatibilidade retroativa**: `--http` e `--angular` continuam funcionando como aliases
+- ✅ **Relatório de definições ausentes**: Cada plugin HTTP gera relatório com os pontos que viraram `any`
 
 ## Como Usar
 
@@ -62,21 +65,29 @@ O comando irá:
 1. Ler o arquivo OpenAPI/Swagger especificado
 2. Validar o schema OpenAPI
 3. **Por padrão**: Gerar apenas interfaces TypeScript (models)
-4. **Com `--http`**: Gerar também métodos HTTP (Angular ou fetch)
+4. **Com `--http`**: Gerar também métodos HTTP (fetch por padrão)
 5. **Com `--angular --http`**: Detectar projeto Angular e gerar serviço Angular
-6. **Com `--http` (sem Angular)**: Gerar cliente fetch-based
-7. Salvar nos diretórios apropriados (`outputs/` ou `src/app/sauron/`)
-8. Gerar relatório de definições ausentes em `missing-swagger-definitions.json` (quando `--http` está ativo)
+6. **Com `--plugin <id>`**: Escolher explicitamente o plugin (`fetch`, `angular`, `axios`)
+7. **Com `--plugin angular` fora de projeto Angular**: fallback automático para `fetch`
+8. Salvar nos diretórios apropriados (`outputs/` ou `src/app/sauron/`)
+9. Gerar relatório de definições ausentes ao lado do cliente/serviço HTTP gerado
 
 ### Flags Disponíveis
 
 - **`init`**: Cria `sauron.config.ts` com configurações iniciais
 - **Sem flags**: Apenas models TypeScript
-- **`--http`**: Models + métodos HTTP (fetch-based por padrão)
-- **`--angular --http`**: Models + serviço Angular (requer projeto Angular)
+- **`--http`**: Models + métodos HTTP com plugin padrão (`fetch`)
+- **`--angular --http`**: Models + serviço Angular (alias compatível)
+- **`--plugin <id>`**: Seleciona plugin HTTP explicitamente (`fetch`, `angular`, `axios`)
 - **`--input arquivo.json`**: Especificar arquivo de entrada
 - **`--output diretorio`**: Diretório de saída customizado
 - **`--config arquivo.ts`**: Caminho para arquivo de configuração (padrão: `sauron.config.ts`)
+
+Regras de precedência:
+
+- Se `--plugin` for informado, ele tem prioridade sobre `--http` e `--angular`.
+- Se `--plugin` não for informado, `--http` usa `fetch`.
+- Se `--plugin` não for informado, `--http --angular` usa `angular`.
 
 ### Arquivo de Configuração (`sauron.config.ts`)
 
@@ -88,6 +99,7 @@ import type { SauronConfig } from "sauron";
 export default {
   input: "swagger.json",
   // url: "https://api.exemplo.com/openapi.json",
+  // plugin: ["fetch"], // fetch | angular | axios
   output: "outputs",
   angular: false,
   http: true,
@@ -131,16 +143,21 @@ src/
 outputs/
 ├── models/
 │   └── index.ts                            # Arquivo gerado com tipos TypeScript
-└── http-client/                            # Quando --http (sem Angular)
-    ├── sauron-api.client.ts               # Cliente fetch
-    └── missing-swagger-definitions.json   # Relatório de definições ausentes
+└── http-client/                            # Quando plugin fetch/axios
+    ├── sauron-api.client.ts               # Cliente fetch (plugin fetch)
+    ├── sauron-api.axios-client.ts         # Cliente axios (plugin axios)
+    ├── missing-swagger-definitions.json   # Relatório (plugin fetch)
+    ├── type-coverage-report.json          # Cobertura de tipos (plugin fetch)
+    ├── missing-swagger-definitions.axios.json # Relatório (plugin axios)
+    └── type-coverage-report.axios.json    # Cobertura de tipos (plugin axios)
 
 src/app/sauron/
 ├── models/
 │   └── index.ts                            # Arquivo gerado com tipos TypeScript
 └── angular-http-client/                    # Quando --angular --http
     ├── sauron-api.service.ts              # Serviço Angular
-    └── missing-swagger-definitions.json   # Relatório de definições ausentes
+    ├── missing-swagger-definitions.json   # Relatório de definições ausentes
+    └── type-coverage-report.json          # Cobertura de tipos
 ```
 
 ## Exemplo de Saída
@@ -357,6 +374,23 @@ sauronApi.setBaseUrl("https://api.exemplo.com");
 const result = await sauronApi.GetLaboratorioWithParams("search", 1, 10);
 ```
 
+### Cliente Axios
+
+```bash
+sauron swagger.json --plugin axios
+```
+
+Gera models + cliente axios em `outputs/http-client/sauron-api.axios-client.ts`.
+Também gera `outputs/http-client/missing-swagger-definitions.axios.json`.
+
+```typescript
+import { SauronAxiosApiClient } from "./outputs/http-client/sauron-api.axios-client";
+
+const api = new SauronAxiosApiClient("https://api.exemplo.com");
+const result = await api.GetLaboratorioWithParams("search", 1, 10);
+console.log(result);
+```
+
 ### Serviço Angular
 
 ```bash
@@ -431,11 +465,28 @@ export class MyComponent {
 
 ## Relatório de Definições Ausentes
 
-Quando `--http` está habilitado (fetch ou Angular), o CLI gera automaticamente um arquivo
-`missing-swagger-definitions.json` ao lado do cliente/serviço HTTP.
+Quando há geração HTTP, o CLI gera automaticamente um relatório ao lado do cliente/serviço.
+
+Arquivos atuais:
+
+- `missing-swagger-definitions.json` (plugin `fetch` e `angular`)
+- `missing-swagger-definitions.axios.json` (plugin `axios`)
+- `type-coverage-report.json` (plugin `fetch` e `angular`)
+- `type-coverage-report.axios.json` (plugin `axios`)
 
 Esse relatório lista os pontos da especificação Swagger/OpenAPI que resultaram em `any` na
 camada HTTP gerada, para facilitar correções no contrato da API.
+
+## Relatório de Cobertura de Tipos
+
+Quando há geração HTTP, o CLI também gera um relatório de cobertura de tipos por operação.
+
+Esse relatório mostra:
+
+- Cobertura total de tipagem (`typed` vs `untyped`)
+- Cobertura por localização (`path.parameter`, `query.parameter`, `request.body`, `response.body`)
+- Resumo por operação (rota + método)
+- Lista de ocorrências não tipadas em `issues`
 
 ### Estrutura do arquivo
 
@@ -459,6 +510,24 @@ camada HTTP gerada, para facilitar correções no contrato da API.
   "recommendedDefinition": "Define parameter.schema with a primitive type, enum, object, array, or valid $ref."
 }
 ```
+
+## Sistema de Plugins
+
+Plugins HTTP built-in:
+
+- `fetch`
+- `angular`
+- `axios`
+
+Exemplos:
+
+```bash
+sauron swagger.json --plugin fetch
+sauron swagger.json --plugin angular
+sauron swagger.json --plugin axios
+```
+
+Para criar novos plugins, veja `docs/plugins.md`.
 
 ## Distribuição
 

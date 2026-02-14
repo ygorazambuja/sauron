@@ -3,6 +3,7 @@ export interface CliOptions {
 	url?: string;
 	angular: boolean;
 	http: boolean;
+	plugin?: string[];
 	output?: string;
 	config?: string;
 	help: boolean;
@@ -13,6 +14,7 @@ export interface SauronConfig {
 	url?: string;
 	angular?: boolean;
 	http?: boolean;
+	plugin?: string[];
 	output?: string;
 }
 

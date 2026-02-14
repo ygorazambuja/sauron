@@ -28,6 +28,17 @@ export {
 	createMissingSwaggerDefinitionsReport,
 	generateMissingSwaggerDefinitionsFile,
 } from "./generators/missing-definitions";
+export {
+	createTypeCoverageReport,
+	generateTypeCoverageReportFile,
+} from "./generators/type-coverage";
+export {
+	BUILTIN_PLUGIN_IDS,
+	createDefaultPluginRegistry,
+	createPluginRegistry,
+} from "./plugins/registry";
+export { runHttpPlugins } from "./plugins/runner";
+export type { PluginContext, SauronPlugin } from "./plugins/types";
 
 export { main };
 

@@ -122,6 +122,7 @@ export default {
   // Use either "input" or "url". If both are set, "url" takes precedence.
   input: "swagger.json",
   // url: "https://example.com/openapi.json",
+  // plugin: ["fetch"],
   output: "${defaultOutput}",
   angular: ${angularProjectDetected},
   http: true,
@@ -183,6 +184,8 @@ export function mergeOptionsWithConfig(
 	options: CliOptions,
 	config: SauronConfig,
 ): CliOptions {
+	const mergedPlugins = resolveMergedPlugins(options.plugin, config.plugin);
+
 	return {
 		input:
 			options.input !== "swagger.json"
@@ -191,8 +194,35 @@ export function mergeOptionsWithConfig(
 		url: options.url ?? config.url,
 		angular: options.angular || !!config.angular,
 		http: options.http || !!config.http,
+		plugin: mergedPlugins,
 		output: options.output ?? config.output,
 		config: options.config,
 		help: options.help,
 	};
+}
+
+/**
+ * Resolve merged plugins.
+ * @param cliPlugins Input parameter `cliPlugins`.
+ * @param configPlugins Input parameter `configPlugins`.
+ * @returns Resolve merged plugins output as `string[] | undefined`.
+ * @example
+ * ```ts
+ * const result = resolveMergedPlugins(["fetch"], ["angular"]);
+ * // result: string[] | undefined
+ * ```
+ */
+function resolveMergedPlugins(
+	cliPlugins?: string[],
+	configPlugins?: string[],
+): string[] | undefined {
+	if (Array.isArray(cliPlugins) && cliPlugins.length > 0) {
+		return [...cliPlugins];
+	}
+
+	if (Array.isArray(configPlugins) && configPlugins.length > 0) {
+		return [...configPlugins];
+	}
+
+	return undefined;
 }

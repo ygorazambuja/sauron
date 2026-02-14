@@ -51,6 +51,11 @@ export function parseArgs(): CliOptions {
 				type: "boolean",
 				short: "t",
 			},
+			plugin: {
+				type: "string",
+				short: "p",
+				multiple: true,
+			},
 			output: {
 				type: "string",
 				short: "o",
@@ -86,6 +91,9 @@ export function parseArgs(): CliOptions {
 	}
 	if (values.http) {
 		options.http = values.http;
+	}
+	if (values.plugin) {
+		options.plugin = normalizePluginValues(values.plugin);
 	}
 	if (values.output) {
 		options.output = values.output;
@@ -128,6 +136,7 @@ OPTIONS:
   -u, --url <url>        Download OpenAPI/Swagger JSON from URL
   -a, --angular          Generate Angular service in src/app/sauron (requires Angular project)
   -t, --http             Generate HTTP client/service methods
+  -p, --plugin <id>      HTTP plugin to run (repeatable: fetch, angular, axios)
   -o, --output <dir>     Output directory (default: outputs or src/app/sauron)
   -c, --config <file>    Config file path (default: sauron.config.ts)
   -h, --help            Show this help message
@@ -142,6 +151,9 @@ EXAMPLES:
   sauron --input swaggerAfEstoque.json --angular --http
   sauron --url https://api.example.com/swagger.json --http
   sauron --http -i api.json -o ./generated
+  sauron --plugin fetch -i api.json
+  sauron --plugin axios -i api.json
+  sauron --plugin angular --plugin fetch -i api.json
 
 When --angular flag is used, the tool will:
 1. Detect if current directory is an Angular project
@@ -154,4 +166,31 @@ When --http flag is used without --angular:
 
 Without flags, generates only TypeScript models.
 `);
+}
+
+/**
+ * Normalize plugin values.
+ * @param pluginValues Input parameter `pluginValues`.
+ * @returns Normalize plugin values output as `string[]`.
+ * @example
+ * ```ts
+ * const result = normalizePluginValues(["fetch", "angular"]);
+ * // result: string[]
+ * ```
+ */
+function normalizePluginValues(
+	pluginValues: string | string[],
+): string[] {
+	if (Array.isArray(pluginValues)) {
+		return pluginValues
+			.map((plugin) => plugin.trim())
+			.filter((plugin) => plugin.length > 0);
+	}
+
+	const normalizedPlugin = pluginValues.trim();
+	if (!normalizedPlugin) {
+		return [];
+	}
+
+	return [normalizedPlugin];
 }

@@ -1,21 +1,12 @@
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { generateAngularService } from "../generators/angular";
 import {
-	createMissingSwaggerDefinitionsReport,
-	generateMissingSwaggerDefinitionsFile,
-} from "../generators/missing-definitions";
-import {
-	createFetchHttpMethods,
-	generateFetchService,
-} from "../generators/fetch";
-import {
-	createAngularHttpClientMethods,
 	createModelsWithOperationTypes,
 	fetchJsonFromUrl,
 	readJsonFile,
 	verifySwaggerComposition,
 } from "../utils";
+import { runHttpPlugins } from "../plugins/runner";
 import { parseArgs, parseCommand, showHelp } from "./args";
 import {
 	createGeneratedFileHeader,
@@ -24,8 +15,8 @@ import {
 	loadSauronConfig,
 	mergeOptionsWithConfig,
 } from "./config";
-import { getOutputPaths, isAngularProject } from "./project";
-import { DEFAULT_CONFIG_FILE } from "./types";
+import { isAngularProject, resolveOutputBasePath } from "./project";
+import { DEFAULT_CONFIG_FILE, type CliOptions } from "./types";
 
 /**
  * Main.
@@ -65,7 +56,8 @@ export async function main() {
 		if (options.url) {
 			console.log(`📖 Downloading OpenAPI spec from: ${options.url}`);
 			config = await fetchJsonFromUrl(options.url);
-		} else {
+		}
+		if (!options.url) {
 			console.log(`📖 Reading OpenAPI spec from: ${options.input}`);
 			config = await readJsonFile(options.input);
 		}
@@ -77,7 +69,15 @@ export async function main() {
 		console.log("✅ Validating OpenAPI schema...");
 		const schema = verifySwaggerComposition(config as Record<string, unknown>);
 
-		const { modelsPath, servicePath } = getOutputPaths(options);
+		const requestedPluginIds = resolveEffectivePluginIds(options);
+		logPluginCompatibilityNotice(options, requestedPluginIds);
+
+		const angularDetected = isAngularProject();
+		const preferAngularOutput = requestedPluginIds.includes("angular");
+		const baseOutputPath = resolveOutputBasePath(options, preferAngularOutput);
+		const modelsPath = join(baseOutputPath, "models", "index.ts");
+		mkdirSync(dirname(modelsPath), { recursive: true });
+
 		const fileHeader = createGeneratedFileHeader(schema);
 
 		console.log("🔧 Generating TypeScript models...");
@@ -89,91 +89,188 @@ export async function main() {
 		);
 		writeFileSync(modelsPath, formattedModels);
 
-		let httpMethodsCount = 0;
+		const pluginResults = await runHttpPlugins(requestedPluginIds, {
+			schema,
+			options,
+			baseOutputPath,
+			modelsPath,
+			fileHeader,
+			operationTypes,
+			typeNameMap,
+			isAngularProject: angularDetected,
+			writeFormattedFile: async (filePath: string, content: string) => {
+				const formattedContent = await formatGeneratedFile(content, filePath);
+				writeFileSync(filePath, formattedContent);
+			},
+		});
 
-		if (options.http && servicePath) {
-			if (options.angular && isAngularProject()) {
-				console.log("🔧 Generating Angular HTTP Client service...");
-				const {
-					methods: angularMethods,
-					imports: angularImports,
-					paramsInterfaces: angularParamsInterfaces,
-				} = createAngularHttpClientMethods(schema, operationTypes, typeNameMap);
-				const angularService = generateAngularService(
-					angularMethods,
-					angularImports,
-					true,
-					angularParamsInterfaces,
-				);
-				const formattedAngularService = await formatGeneratedFile(
-					`${fileHeader}\n${angularService}`,
-					servicePath,
-				);
-				writeFileSync(servicePath, formattedAngularService);
-				httpMethodsCount = angularMethods.length;
-			} else {
-				console.log("🔧 Generating fetch-based HTTP methods...");
-				const usedTypes = new Set<string>();
-				const {
-					methods: fetchMethods,
-					paramsInterfaces: fetchParamsInterfaces,
-				} = createFetchHttpMethods(
-					schema,
-					usedTypes,
-					operationTypes,
-					typeNameMap,
-				);
-				const fetchService = generateFetchService(
-					fetchMethods,
-					modelsPath,
-					usedTypes,
-					fetchParamsInterfaces,
-				);
-				const formattedFetchService = await formatGeneratedFile(
-					`${fileHeader}\n${fetchService}`,
-					servicePath,
-				);
-				writeFileSync(servicePath, formattedFetchService);
-				httpMethodsCount = fetchMethods.length;
-			}
+		logPluginReports(pluginResults);
 
-			const missingDefinitionsReport = createMissingSwaggerDefinitionsReport(
-				schema,
-				operationTypes,
-			);
-			const missingDefinitionsReportPath = join(
-				dirname(servicePath),
-				"missing-swagger-definitions.json",
-			);
-			const reportFileContent = generateMissingSwaggerDefinitionsFile(
-				missingDefinitionsReport,
-			);
-			writeFileSync(missingDefinitionsReportPath, reportFileContent);
-			console.log(
-				`🧾 Missing Swagger definitions report: ${missingDefinitionsReportPath}`,
-			);
-			console.log(
-				`🔎 Missing definitions found: ${missingDefinitionsReport.totalIssues}`,
-			);
-		}
-
-		console.log(`\n✅ Generation complete!`);
+		console.log("\n✅ Generation complete!");
 		console.log(`📄 Models: ${models.length} TypeScript interfaces/types`);
-		if (options.http) {
-			console.log(
-				`🔗 HTTP Methods: ${httpMethodsCount} ${
-					options.angular && isAngularProject() ? "Angular" : "fetch"
-				} methods`,
-			);
-		}
-		console.log(
-			`📁 Output: ${
-				options.output ||
-				(options.angular && isAngularProject() ? "src/app/sauron" : "outputs")
-			}`,
-		);
+		logPluginMethodSummary(pluginResults);
+		console.log(`📁 Output: ${resolveOutputDisplayPath(options, angularDetected, preferAngularOutput)}`);
 	} catch (error) {
 		console.error("❌ Error:", error);
 		process.exit(1);
 	}
+}
+
+/**
+ * Resolve effective plugin IDs.
+ * @param options Input parameter `options`.
+ * @returns Resolve effective plugin IDs output as `string[]`.
+ * @example
+ * ```ts
+ * const result = resolveEffectivePluginIds({
+ * 	input: "swagger.json",
+ * 	angular: false,
+ * 	http: true,
+ * 	help: false,
+ * });
+ * // result: string[]
+ * ```
+ */
+function resolveEffectivePluginIds(options: CliOptions): string[] {
+	if (options.plugin && options.plugin.length > 0) {
+		return normalizePluginIds(options.plugin);
+	}
+
+	if (!options.http) {
+		return [];
+	}
+
+	if (options.angular) {
+		return ["angular"];
+	}
+
+	return ["fetch"];
+}
+
+/**
+ * Normalize plugin IDs.
+ * @param pluginIds Input parameter `pluginIds`.
+ * @returns Normalize plugin IDs output as `string[]`.
+ * @example
+ * ```ts
+ * const result = normalizePluginIds(["fetch", "Angular"]);
+ * // result: string[]
+ * ```
+ */
+function normalizePluginIds(pluginIds: string[]): string[] {
+	const normalizedIds: string[] = [];
+	const usedIds = new Set<string>();
+
+	for (const pluginId of pluginIds) {
+		const normalizedId = pluginId.trim().toLowerCase();
+		if (!normalizedId) {
+			continue;
+		}
+		if (usedIds.has(normalizedId)) {
+			continue;
+		}
+		usedIds.add(normalizedId);
+		normalizedIds.push(normalizedId);
+	}
+
+	return normalizedIds;
+}
+
+/**
+ * Log plugin compatibility notice.
+ * @param options Input parameter `options`.
+ * @param effectivePluginIds Input parameter `effectivePluginIds`.
+ * @example
+ * ```ts
+ * logPluginCompatibilityNotice(
+ * 	{ input: "swagger.json", angular: true, http: true, help: false, plugin: ["fetch"] },
+ * 	["fetch"],
+ * );
+ * ```
+ */
+function logPluginCompatibilityNotice(
+	options: CliOptions,
+	effectivePluginIds: string[],
+): void {
+	if (!options.plugin || options.plugin.length === 0) {
+		return;
+	}
+	if (!options.http && !options.angular) {
+		return;
+	}
+	if (effectivePluginIds.length === 0) {
+		return;
+	}
+
+	console.log(
+		"ℹ️  --plugin provided. Ignoring compatibility aliases --http/--angular.",
+	);
+}
+
+/**
+ * Log plugin reports.
+ * @param pluginResults Input parameter `pluginResults`.
+ * @example
+ * ```ts
+ * logPluginReports([]);
+ * ```
+ */
+function logPluginReports(
+	pluginResults: Array<{ reportPath: string; typeCoverageReportPath?: string }>,
+): void {
+	for (const result of pluginResults) {
+		console.log(`🧾 Missing Swagger definitions report: ${result.reportPath}`);
+		if (!result.typeCoverageReportPath) {
+			continue;
+		}
+		console.log(`📊 Type coverage report: ${result.typeCoverageReportPath}`);
+	}
+}
+
+/**
+ * Log plugin method summary.
+ * @param pluginResults Input parameter `pluginResults`.
+ * @example
+ * ```ts
+ * logPluginMethodSummary([]);
+ * ```
+ */
+function logPluginMethodSummary(
+	pluginResults: Array<{ executedPluginId: string; methodCount: number }>,
+): void {
+	for (const result of pluginResults) {
+		console.log(
+			`🔗 HTTP Methods (${result.executedPluginId}): ${result.methodCount} methods`,
+		);
+	}
+}
+
+/**
+ * Resolve output display path.
+ * @param options Input parameter `options`.
+ * @param angularDetected Input parameter `angularDetected`.
+ * @param preferAngularOutput Input parameter `preferAngularOutput`.
+ * @returns Resolve output display path output as `string`.
+ * @example
+ * ```ts
+ * const result = resolveOutputDisplayPath(
+ * 	{ input: "swagger.json", angular: false, http: false, help: false },
+ * 	false,
+ * 	false,
+ * );
+ * // result: string
+ * ```
+ */
+function resolveOutputDisplayPath(
+	options: CliOptions,
+	angularDetected: boolean,
+	preferAngularOutput: boolean,
+): string {
+	if (options.output) {
+		return options.output;
+	}
+	if (preferAngularOutput && angularDetected) {
+		return "src/app/sauron";
+	}
+	return "outputs";
 }

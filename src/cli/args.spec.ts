@@ -112,6 +112,23 @@ describe("CLI args", () => {
 			expect(parseArgs().url).toBe("https://example.com/openapi.json");
 		});
 
+		test("should parse a single plugin flag", () => {
+			Bun.argv = ["bun", "index.js", "--plugin", "fetch"];
+			expect(parseArgs().plugin).toEqual(["fetch"]);
+		});
+
+		test("should parse repeated plugin flags", () => {
+			Bun.argv = [
+				"bun",
+				"index.js",
+				"--plugin",
+				"fetch",
+				"--plugin",
+				"angular",
+			];
+			expect(parseArgs().plugin).toEqual(["fetch", "angular"]);
+		});
+
 		test("should ignore init command when resolving positional input", () => {
 			Bun.argv = ["bun", "index.js", "init", "api.json"];
 			expect(parseArgs().input).toBe("api.json");

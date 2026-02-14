@@ -103,6 +103,7 @@ describe("CLI config", () => {
 				input: "swagger.json",
 				angular: true,
 				http: false,
+				plugin: ["fetch"],
 				help: false,
 				output: "cli-output",
 			},
@@ -111,6 +112,7 @@ describe("CLI config", () => {
 				url: "https://example.com/openapi.json",
 				angular: false,
 				http: true,
+				plugin: ["angular"],
 				output: "config-output",
 			},
 		);
@@ -120,10 +122,27 @@ describe("CLI config", () => {
 			url: "https://example.com/openapi.json",
 			angular: true,
 			http: true,
+			plugin: ["fetch"],
 			output: "cli-output",
 			help: false,
 			config: undefined,
 		});
+	});
+
+	test("should use plugin from config when CLI plugin is absent", () => {
+		const merged = mergeOptionsWithConfig(
+			{
+				input: "swagger.json",
+				angular: false,
+				http: false,
+				help: false,
+			},
+			{
+				plugin: ["angular"],
+			},
+		);
+
+		expect(merged.plugin).toEqual(["angular"]);
 	});
 
 	test("should include timestamp and OpenAPI metadata in header", () => {
