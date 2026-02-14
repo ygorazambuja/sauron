@@ -1478,7 +1478,7 @@ function convertSchemaToTypeScript(
 		case "string":
 			// Special handling for date-time and numeric formats
 			if (schema.format === "date-time") {
-				typeScriptType = "Date";
+				typeScriptType = "string";
 			} else if (schema.format === "numeric") {
 				typeScriptType = "number";
 			} else {
@@ -1573,9 +1573,13 @@ function generateTypeScriptDefinition(
 				: true;
 
 			const optionalMarker = isRequired ? "" : "?";
-			propertyDefinitions.push(
-				`  ${propertyName}${optionalMarker}: ${propertyType};`,
-			);
+			if (
+				propertySchema.type === "string" &&
+				propertySchema.format === "date-time"
+			) {
+				propertyDefinitions.push("  // openapi Date -> String");
+			}
+			propertyDefinitions.push(`  ${propertyName}${optionalMarker}: ${propertyType};`);
 		}
 
 		const propertiesString = propertyDefinitions.join("\n");

@@ -302,8 +302,70 @@ describe("OpenAPI to TypeScript Converter Utilities", () => {
 
 			const result = createModels(openApiSchema);
 
-			expect(result[0]).toContain("createdAt: Date;");
+			expect(result[0]).toContain("// openapi Date -> String");
+			expect(result[0]).toContain("createdAt: string;");
 			expect(result[0]).toContain("updatedAt: string;");
+		});
+
+		test("should generate string and comment for nullable optional date-time fields", () => {
+			const openApiSchema = {
+				openapi: "3.0.4",
+				info: { title: "Test API", version: "1.0.0" },
+				paths: {},
+				components: {
+					schemas: {
+						EventDates: {
+							type: "object",
+							properties: {
+								createdAt: { type: "string", format: "date-time" },
+								processedAt: {
+									type: "string",
+									format: "date-time",
+									nullable: true,
+								},
+							},
+							required: ["createdAt"],
+						},
+					},
+				},
+			};
+
+			const result = createModels(openApiSchema);
+
+			expect(result[0]).toContain(
+				"// openapi Date -> String\n  createdAt: string;",
+			);
+			expect(result[0]).toContain(
+				"// openapi Date -> String\n  processedAt?: string | null;",
+			);
+		});
+
+		test("should add one date annotation per date-time property only", () => {
+			const openApiSchema = {
+				openapi: "3.0.4",
+				info: { title: "Test API", version: "1.0.0" },
+				paths: {},
+				components: {
+					schemas: {
+						DateAudit: {
+							type: "object",
+							properties: {
+								id: { type: "integer" },
+								startedAt: { type: "string", format: "date-time" },
+								endedAt: { type: "string", format: "date-time" },
+								description: { type: "string" },
+							},
+						},
+					},
+				},
+			};
+
+			const result = createModels(openApiSchema);
+			const annotationMatches = result[0].match(/\/\/ openapi Date -> String/g) || [];
+
+			expect(annotationMatches).toHaveLength(2);
+			expect(result[0]).toContain("id: number;");
+			expect(result[0]).toContain("description: string;");
 		});
 
 		test("should handle numeric enums", () => {
@@ -766,7 +828,8 @@ describe("OpenAPI to TypeScript Converter Utilities", () => {
 			expect(userInterface).toContain("profile: Profile;");
 			expect(userInterface).toContain("posts: Post[];");
 			expect(userInterface).toContain("status: UserStatus;");
-			expect(userInterface).toContain("createdAt: Date;");
+			expect(userInterface).toContain("// openapi Date -> String");
+			expect(userInterface).toContain("createdAt: string;");
 
 			// Check other interfaces and types
 			expect(result.some((r) => r.includes("interface Profile"))).toBe(true);
