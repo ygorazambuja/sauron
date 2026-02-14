@@ -552,9 +552,7 @@ describe("OpenAPI to TypeScript Converter Utilities", () => {
 			const { methods, paramsInterfaces } =
 				createAngularHttpClientMethods(openApiSchema);
 			const reportMethod = methods.find((m) => m.includes("PostReport"));
-			const auditMethod = methods.find((m) =>
-				m.includes("GetAuditWithParams"),
-			);
+			const auditMethod = methods.find((m) => m.includes("GetAuditWithParams"));
 
 			expect(reportMethod).toContain("params: PostReportParams");
 			expect(reportMethod).toContain(

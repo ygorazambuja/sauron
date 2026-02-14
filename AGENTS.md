@@ -23,6 +23,13 @@
 - Indentation: tabs. Quotes: double quotes.
 - Prefer clear, descriptive function names for generators (e.g., `createModels`, `generateFetchService`).
 - Files use `.ts` and are organized by responsibility (CLI vs utilities vs schemas).
+- Avoid `else` and `switch`; prefer guard clauses and early returns.
+- Apply Object Calisthenics concepts in new/refactored code:
+  - Keep methods small and focused on one responsibility.
+  - Prefer one level of indentation per method when practical.
+  - Extract branching/formatting logic into small helper functions instead of nesting.
+- Every new function must include TSDoc with `@param`, `@returns` (when applicable), and at least one `@example`.
+- Every new function must be reviewed against Object Calisthenics and clean code rules before merge.
 
 ## Testing Guidelines
 - Framework: `bun:test` (see `src/index.test.ts`).

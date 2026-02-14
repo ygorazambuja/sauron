@@ -338,6 +338,9 @@ Ou usar a instância padrão:
 ```typescript
 import { sauronApi } from "./outputs/http-client/sauron-api.client";
 
+// Configura uma única vez para todas as chamadas
+sauronApi.setBaseUrl("https://api.exemplo.com");
+
 const result = await sauronApi.GetLaboratorioWithParams("search", 1, 10);
 ```
 

@@ -90,10 +90,14 @@ export type OperationTypeMap = Record<
 export type TypeNameMap = Map<string, string>;
 
 /**
- * Reads and parses a JSON file from the filesystem
- * @param filePath - Path to the JSON file to read
- * @returns Parsed JSON content as unknown object (caller should cast appropriately)
- * @throws Error if file cannot be read or JSON is invalid
+ * Read json file.
+ * @param filePath Input parameter `filePath`.
+ * @returns Read json file output as `Promise<unknown>`.
+ * @example
+ * ```ts
+ * const result = await readJsonFile("value");
+ * // result: unknown
+ * ```
  */
 export async function readJsonFile(filePath: string): Promise<unknown> {
 	if (!filePath || typeof filePath !== "string") {
@@ -112,10 +116,14 @@ export async function readJsonFile(filePath: string): Promise<unknown> {
 }
 
 /**
- * Fetches and parses JSON from a URL
- * @param url - URL to fetch JSON from
- * @returns Parsed JSON content as unknown object (caller should cast appropriately)
- * @throws Error if URL cannot be fetched or JSON is invalid
+ * Fetch json from url.
+ * @param url Input parameter `url`.
+ * @returns Fetch json from url output as `Promise<unknown>`.
+ * @example
+ * ```ts
+ * const result = await fetchJsonFromUrl("value");
+ * // result: unknown
+ * ```
  */
 export async function fetchJsonFromUrl(url: string): Promise<unknown> {
 	if (!url || typeof url !== "string") {
@@ -135,10 +143,14 @@ export async function fetchJsonFromUrl(url: string): Promise<unknown> {
 }
 
 /**
- * Validates and parses OpenAPI/Swagger JSON against the expected schema structure
- * @param swaggerData - Raw OpenAPI JSON data to validate
- * @returns Validated and typed OpenAPI schema object
- * @throws Error if validation fails with detailed error message
+ * Verify swagger composition.
+ * @param swaggerData Input parameter `swaggerData`.
+ * @returns Verify swagger composition output as `z.infer<typeof SwaggerOrOpenAPISchema>`.
+ * @example
+ * ```ts
+ * const result = verifySwaggerComposition({});
+ * // result: z.infer<typeof SwaggerOrOpenAPISchema>
+ * ```
  */
 export function verifySwaggerComposition(
 	swaggerData: Record<string, unknown>,
@@ -157,10 +169,14 @@ export function verifySwaggerComposition(
 }
 
 /**
- * Generates TypeScript interface/type definitions from OpenAPI schema components
- * @param openApiSchema - Validated OpenAPI schema object containing components.schemas
- * @returns Array of TypeScript type definition strings (interfaces and type unions)
- * @throws Error if no schemas are found in the OpenAPI specification
+ * Create models.
+ * @param data Input parameter `data`.
+ * @returns Create models output as `string[]`.
+ * @example
+ * ```ts
+ * const result = createModels({});
+ * // result: string[]
+ * ```
  */
 export function createModels(
 	data: z.infer<typeof SwaggerOrOpenAPISchema>,
@@ -169,6 +185,16 @@ export function createModels(
 	return models;
 }
 
+/**
+ * Create models with operation types.
+ * @param data Input parameter `data`.
+ * @returns Create models with operation types output as `unknown`.
+ * @example
+ * ```ts
+ * const result = createModelsWithOperationTypes({});
+ * // result: unknown
+ * ```
+ */
 export function createModelsWithOperationTypes(
 	data: z.infer<typeof SwaggerOrOpenAPISchema>,
 ): {
@@ -216,10 +242,16 @@ export function createModelsWithOperationTypes(
 }
 
 /**
- * Generates Angular HTTP Client service methods from OpenAPI paths
- * @param openApiSchema - Validated OpenAPI schema object containing paths
- * @returns Array of Angular service method definitions as strings
- * @throws Error if no paths are found in the OpenAPI specification
+ * Create angular http client methods.
+ * @param data Input parameter `data`.
+ * @param operationTypes Input parameter `operationTypes`.
+ * @param typeNameMap Input parameter `typeNameMap`.
+ * @returns Create angular http client methods output as `unknown`.
+ * @example
+ * ```ts
+ * const result = createAngularHttpClientMethods({}, {}, {});
+ * // result: unknown
+ * ```
  */
 export function createAngularHttpClientMethods(
 	data: z.infer<typeof SwaggerOrOpenAPISchema>,
@@ -270,6 +302,16 @@ export function createAngularHttpClientMethods(
 	return { methods, imports, paramsInterfaces };
 }
 
+/**
+ * To pascal case.
+ * @param value Input parameter `value`.
+ * @returns To pascal case output as `string`.
+ * @example
+ * ```ts
+ * const result = toPascalCase("value");
+ * // result: string
+ * ```
+ */
 function toPascalCase(value: string): string {
 	const sanitized = value
 		.replace(/[^a-zA-Z0-9]+/g, " ")
@@ -289,15 +331,46 @@ function toPascalCase(value: string): string {
 	return sanitized;
 }
 
+/**
+ * Sanitize type name.
+ * @param value Input parameter `value`.
+ * @returns Sanitize type name output as `string`.
+ * @example
+ * ```ts
+ * const result = sanitizeTypeName("value");
+ * // result: string
+ * ```
+ */
 function sanitizeTypeName(value: string): string {
 	const sanitized = toPascalCase(value);
 	return sanitized || "Type";
 }
 
+/**
+ * Resolve type name.
+ * @param value Input parameter `value`.
+ * @param typeNameMap Input parameter `typeNameMap`.
+ * @returns Resolve type name output as `string`.
+ * @example
+ * ```ts
+ * const result = resolveTypeName("value", {});
+ * // result: string
+ * ```
+ */
 function resolveTypeName(value: string, typeNameMap?: TypeNameMap): string {
 	return typeNameMap?.get(value) ?? sanitizeTypeName(value);
 }
 
+/**
+ * Create type name map.
+ * @param schemas Input parameter `schemas`.
+ * @returns Create type name map output as `unknown`.
+ * @example
+ * ```ts
+ * const result = createTypeNameMap({});
+ * // result: unknown
+ * ```
+ */
 function createTypeNameMap(schemas?: Record<string, OpenApiSchema>): {
 	typeNameMap: TypeNameMap;
 	usedTypeNames: Set<string>;
@@ -318,6 +391,18 @@ function createTypeNameMap(schemas?: Record<string, OpenApiSchema>): {
 	return { typeNameMap, usedTypeNames };
 }
 
+/**
+ * Build inline base name.
+ * @param path Input parameter `path`.
+ * @param httpMethod Input parameter `httpMethod`.
+ * @param operation Input parameter `operation`.
+ * @returns Build inline base name output as `string`.
+ * @example
+ * ```ts
+ * const result = buildInlineBaseName("value", "value", {});
+ * // result: string
+ * ```
+ */
 function buildInlineBaseName(
 	path: string,
 	httpMethod: string,
@@ -348,6 +433,17 @@ function buildInlineBaseName(
 	return `${methodPrefix}${pathName}`;
 }
 
+/**
+ * Make unique type name.
+ * @param name Input parameter `name`.
+ * @param usedNames Input parameter `usedNames`.
+ * @returns Make unique type name output as `string`.
+ * @example
+ * ```ts
+ * const result = makeUniqueTypeName("value", new Set());
+ * // result: string
+ * ```
+ */
 function makeUniqueTypeName(name: string, usedNames: Set<string>): string {
 	if (!usedNames.has(name)) {
 		usedNames.add(name);
@@ -364,6 +460,13 @@ function makeUniqueTypeName(name: string, usedNames: Set<string>): string {
 	return uniqueName;
 }
 
+/**
+ * Get preferred content schema.
+ * @example
+ * ```ts
+ * getPreferredContentSchema();
+ * ```
+ */
 function getPreferredContentSchema(
 	content?: Record<string, { schema: OpenApiSchema }>,
 ): OpenApiSchema | undefined {
@@ -379,6 +482,16 @@ function getPreferredContentSchema(
 	return firstKey ? content[firstKey]?.schema : undefined;
 }
 
+/**
+ * Get success response.
+ * @param operation Input parameter `operation`.
+ * @returns Get success response output as `unknown`.
+ * @example
+ * ```ts
+ * const result = getSuccessResponse({});
+ * // result: unknown
+ * ```
+ */
 function getSuccessResponse(
 	operation: OpenApiOperation,
 ): { content?: Record<string, { schema: OpenApiSchema }> } | undefined {
@@ -396,6 +509,18 @@ function getSuccessResponse(
 	return successKey ? responses[successKey] : undefined;
 }
 
+/**
+ * Generate inline type definition.
+ * @param typeName Input parameter `typeName`.
+ * @param schema Input parameter `schema`.
+ * @param typeNameMap Input parameter `typeNameMap`.
+ * @returns Generate inline type definition output as `string`.
+ * @example
+ * ```ts
+ * const result = generateInlineTypeDefinition("value", {}, {});
+ * // result: string
+ * ```
+ */
 function generateInlineTypeDefinition(
 	typeName: string,
 	schema: OpenApiSchema,
@@ -408,6 +533,20 @@ function generateInlineTypeDefinition(
 	return `export type ${typeName} = ${convertSchemaToTypeScript(schema, typeNameMap)};`;
 }
 
+/**
+ * Resolve schema type name.
+ * @param schema Input parameter `schema`.
+ * @param typeName Input parameter `typeName`.
+ * @param usedTypeNames Input parameter `usedTypeNames`.
+ * @param typeDefinitions Input parameter `typeDefinitions`.
+ * @param typeNameMap Input parameter `typeNameMap`.
+ * @returns Resolve schema type name output as `string | undefined`.
+ * @example
+ * ```ts
+ * const result = resolveSchemaTypeName({}, "value", new Set(), [], {});
+ * // result: string | undefined
+ * ```
+ */
 function resolveSchemaTypeName(
 	schema: OpenApiSchema | undefined,
 	typeName: string,
@@ -436,6 +575,18 @@ function resolveSchemaTypeName(
 	return uniqueName;
 }
 
+/**
+ * Collect inline operation types.
+ * @param data Input parameter `data`.
+ * @param usedTypeNames Input parameter `usedTypeNames`.
+ * @param typeNameMap Input parameter `typeNameMap`.
+ * @returns Collect inline operation types output as `unknown`.
+ * @example
+ * ```ts
+ * const result = collectInlineOperationTypes({}, new Set(), {});
+ * // result: unknown
+ * ```
+ */
 function collectInlineOperationTypes(
 	data: z.infer<typeof SwaggerOrOpenAPISchema>,
 	usedTypeNames: Set<string>,
@@ -504,14 +655,20 @@ function collectInlineOperationTypes(
 }
 
 /**
- * Generates Angular HTTP Client methods for a single path
- * @param path - The API path (e.g., "/api/users/{id}")
- * @param operations - The operations for this path (get, post, etc.)
- * @param usedMethodNames - Set of already used method names to avoid conflicts
- * @param components - OpenAPI components for resolving response types
- * @param usedTypes - Set to track used response types for imports
- * @returns Array of method strings for this path
- * @private
+ * Generate methods for path.
+ * @param path Input parameter `path`.
+ * @param operations Input parameter `operations`.
+ * @param usedMethodNames Input parameter `usedMethodNames`.
+ * @param components Input parameter `components`.
+ * @param usedTypes Input parameter `usedTypes`.
+ * @param operationTypes Input parameter `operationTypes`.
+ * @param typeNameMap Input parameter `typeNameMap`.
+ * @returns Generate methods for path output as `unknown`.
+ * @example
+ * ```ts
+ * const result = generateMethodsForPath("value", {}, new Set(), {}, new Set(), {}, {});
+ * // result: unknown
+ * ```
  */
 function generateMethodsForPath(
 	path: string,
@@ -559,15 +716,21 @@ function generateMethodsForPath(
 }
 
 /**
- * Generates a single Angular HTTP Client method
- * @param path - The API path
- * @param httpMethod - The HTTP method (get, post, etc.)
- * @param operation - The OpenAPI operation definition
- * @param usedMethodNames - Set of already used method names to avoid conflicts
- * @param components - OpenAPI components for resolving response types
- * @param usedTypes - Set to track used response types for imports
- * @returns Angular method string or null if cannot generate
- * @private
+ * Generate http method.
+ * @param path Input parameter `path`.
+ * @param httpMethod Input parameter `httpMethod`.
+ * @param operation Input parameter `operation`.
+ * @param usedMethodNames Input parameter `usedMethodNames`.
+ * @param components Input parameter `components`.
+ * @param usedTypes Input parameter `usedTypes`.
+ * @param operationTypes Input parameter `operationTypes`.
+ * @param typeNameMap Input parameter `typeNameMap`.
+ * @returns Generate http method output as `unknown`.
+ * @example
+ * ```ts
+ * const result = generateHttpMethod("value", "value", {}, new Set(), {}, new Set(), {}, {});
+ * // result: unknown
+ * ```
  */
 function generateHttpMethod(
 	path: string,
@@ -655,7 +818,10 @@ function generateHttpMethod(
 
 		let paramsInterface: string | undefined;
 		if (paramInfo.queryParams.length > 0) {
-			paramsInterface = generateParamsInterface(uniqueMethodName, paramInfo.queryParams);
+			paramsInterface = generateParamsInterface(
+				uniqueMethodName,
+				paramInfo.queryParams,
+			);
 		}
 
 		return {
@@ -674,12 +840,16 @@ ${methodBody}
 }
 
 /**
- * Generates a descriptive method name from path and operation
- * @param path - The API path
- * @param httpMethod - The HTTP method
- * @param operation - The operation definition
- * @returns CamelCase method name
- * @private
+ * Generate method name.
+ * @param path Input parameter `path`.
+ * @param httpMethod Input parameter `httpMethod`.
+ * @param operation Input parameter `operation`.
+ * @returns Generate method name output as `string`.
+ * @example
+ * ```ts
+ * const result = generateMethodName("value", "value", {});
+ * // result: string
+ * ```
  */
 function generateMethodName(
 	path: string,
@@ -736,11 +906,15 @@ function generateMethodName(
 }
 
 /**
- * Extracts method parameters from path and operation
- * @param path - The API path
- * @param operation - The operation definition
- * @returns Parameter string for the method signature
- * @private
+ * Build parameter info.
+ * @param path Input parameter `path`.
+ * @param operation Input parameter `operation`.
+ * @param components Input parameter `components`.
+ * @param typeNameMap Input parameter `typeNameMap`.
+ * @example
+ * ```ts
+ * buildParameterInfo("value", {}, {}, {});
+ * ```
  */
 function buildParameterInfo(
 	path: string,
@@ -824,6 +998,13 @@ function buildParameterInfo(
 	return { pathParams, queryParams, bodyParam };
 }
 
+/**
+ * Generate params interface.
+ * @example
+ * ```ts
+ * generateParamsInterface();
+ * ```
+ */
 function generateParamsInterface(
 	methodName: string,
 	queryParams: Array<{ name: string; required: boolean; type: string }>,
@@ -835,6 +1016,21 @@ function generateParamsInterface(
 	return `export interface ${methodName}Params {\n${props.join("\n")}\n}`;
 }
 
+/**
+ * Extract method parameters.
+ * @param path Input parameter `path`.
+ * @param operation Input parameter `operation`.
+ * @param typeInfo Input parameter `typeInfo`.
+ * @param components Input parameter `components`.
+ * @param typeNameMap Input parameter `typeNameMap`.
+ * @param methodName Input parameter `methodName`.
+ * @returns Extract method parameters output as `string`.
+ * @example
+ * ```ts
+ * const result = extractMethodParameters("value", {}, {}, {}, {}, "value");
+ * // result: string
+ * ```
+ */
 function extractMethodParameters(
 	path: string,
 	operation: OpenApiOperation,
@@ -879,6 +1075,18 @@ function extractMethodParameters(
 	return [...params, ...optionalParams].join(", ");
 }
 
+/**
+ * Extract request type.
+ * @param operation Input parameter `operation`.
+ * @param _components Input parameter `_components`.
+ * @param typeNameMap Input parameter `typeNameMap`.
+ * @returns Extract request type output as `string | undefined`.
+ * @example
+ * ```ts
+ * const result = extractRequestType({}, {}, {});
+ * // result: string | undefined
+ * ```
+ */
 function extractRequestType(
 	operation: OpenApiOperation,
 	_components?: any,
@@ -907,11 +1115,16 @@ function extractRequestType(
 }
 
 /**
- * Extracts the return type from an OpenAPI operation response
- * @param operation - The OpenAPI operation definition
- * @param components - The OpenAPI components object for resolving $ref
- * @returns TypeScript type string for the response, or 'any' if not found
- * @private
+ * Extract response type.
+ * @param operation Input parameter `operation`.
+ * @param _components Input parameter `_components`.
+ * @param typeNameMap Input parameter `typeNameMap`.
+ * @returns Extract response type output as `string`.
+ * @example
+ * ```ts
+ * const result = extractResponseType({}, {}, {});
+ * // result: string
+ * ```
  */
 function extractResponseType(
 	operation: OpenApiOperation,
@@ -962,12 +1175,17 @@ function extractResponseType(
 }
 
 /**
- * Generates the method body with HTTP call
- * @param path - The API path
- * @param httpMethod - The HTTP method
- * @param operation - The operation definition
- * @returns Method body as string
- * @private
+ * Generate method body.
+ * @param path Input parameter `path`.
+ * @param httpMethod Input parameter `httpMethod`.
+ * @param operation Input parameter `operation`.
+ * @param responseType Input parameter `responseType`.
+ * @returns Generate method body output as `string`.
+ * @example
+ * ```ts
+ * const result = generateMethodBody("value", "value", {}, "value");
+ * // result: string
+ * ```
  */
 function generateMethodBody(
 	path: string,
@@ -1010,11 +1228,16 @@ function generateMethodBody(
 }
 
 /**
- * Converts an OpenAPI schema definition to a TypeScript type for parameters
- * Keeps date-time as string for HttpClient params compatibility
- * @param schema - OpenAPI schema object to convert
- * @returns TypeScript type string representation for params
- * @private
+ * Convert param schema to type script.
+ * @param schema Input parameter `schema`.
+ * @param components Input parameter `components`.
+ * @param typeNameMap Input parameter `typeNameMap`.
+ * @returns Convert param schema to type script output as `string`.
+ * @example
+ * ```ts
+ * const result = convertParamSchemaToTypeScript({}, {}, {});
+ * // result: string
+ * ```
  */
 function convertParamSchemaToTypeScript(
 	schema: OpenApiSchema,
@@ -1101,6 +1324,15 @@ function convertParamSchemaToTypeScript(
 	return convertSchemaToTypeScript(schema, typeNameMap);
 }
 
+/**
+ * Add param type imports.
+ * @param paramTypes Input parameter `paramTypes`.
+ * @param usedTypes Input parameter `usedTypes`.
+ * @example
+ * ```ts
+ * addParamTypeImports([], new Set());
+ * ```
+ */
 function addParamTypeImports(paramTypes: string[], usedTypes: Set<string>) {
 	for (const type of paramTypes) {
 		const parts = type.split(/[|&]/).map((part) => part.trim());
@@ -1138,11 +1370,15 @@ function addParamTypeImports(paramTypes: string[], usedTypes: Set<string>) {
 }
 
 /**
- * Converts an OpenAPI schema definition to a TypeScript type string
- * Handles primitives, arrays, enums, references, and nullable types
- * @param schema - OpenAPI schema object to convert
- * @returns TypeScript type string representation
- * @private
+ * Convert schema to type script.
+ * @param schema Input parameter `schema`.
+ * @param typeNameMap Input parameter `typeNameMap`.
+ * @returns Convert schema to type script output as `string`.
+ * @example
+ * ```ts
+ * const result = convertSchemaToTypeScript({}, {});
+ * // result: string
+ * ```
  */
 function convertSchemaToTypeScript(
 	schema: OpenApiSchema,
@@ -1272,12 +1508,16 @@ function convertSchemaToTypeScript(
 }
 
 /**
- * Generates a complete TypeScript interface or type definition from an OpenAPI schema
- * Handles both object schemas (interfaces) and enum schemas (union types)
- * @param modelName - Name of the type/interface to generate
- * @param schema - OpenAPI schema definition object
- * @returns Complete TypeScript type definition as a string
- * @private
+ * Generate type script definition.
+ * @param modelName Input parameter `modelName`.
+ * @param schema Input parameter `schema`.
+ * @param typeNameMap Input parameter `typeNameMap`.
+ * @returns Generate type script definition output as `string`.
+ * @example
+ * ```ts
+ * const result = generateTypeScriptDefinition("value", {}, {});
+ * // result: string
+ * ```
  */
 function generateTypeScriptDefinition(
 	modelName: string,
