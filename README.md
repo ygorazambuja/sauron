@@ -94,7 +94,7 @@ Regras de precedência:
 Você pode centralizar as opções do CLI em um arquivo:
 
 ```ts
-import type { SauronConfig } from "sauron";
+import type { SauronConfig } from "@ygorazambuja/sauron";
 
 export default {
   input: "swagger.json",
@@ -543,18 +543,19 @@ bun build --compile ./src/index.ts --outfile sauron
 ./sauron --input api.json --angular
 ```
 
-### NPM Package (Futuro)
+### Publicação no NPM com Bun
 
-Para distribuição via NPM:
+Para validar e publicar no registro npm usando Bun:
 
 ```bash
-npm publish
+bun publish --dry-run
+bun publish --access public
 ```
 
 Então outros projetos podem instalar e usar:
 
 ```bash
-npm install -g sauron
+npm install -g @ygorazambuja/sauron
 sauron --input swagger.json --angular
 ```
 

@@ -1,10 +1,25 @@
 {
-	"name": "sauron",
+	"name": "@ygorazambuja/sauron",
 	"version": "1.0.0",
 	"description": "OpenAPI to TypeScript/Angular Converter - Generate TypeScript interfaces and Angular HTTP services from Swagger/OpenAPI specs",
 	"main": "src/index.ts",
+	"files": [
+		"bin.ts",
+		"src/**/*.ts",
+		"!src/**/*.spec.ts",
+		"!src/**/*.test.ts",
+		"!src/app/sauron/**",
+		"README.md",
+		"docs/plugins.md"
+	],
 	"bin": {
 		"sauron": "./bin.ts"
+	},
+	"engines": {
+		"bun": ">=1.3.0"
+	},
+	"publishConfig": {
+		"access": "public"
 	},
 	"scripts": {
 		"start": "bun run src/index.ts",

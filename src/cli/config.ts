@@ -116,7 +116,7 @@ export async function initConfigFile(
 	const angularProjectDetected = isAngularProject();
 	const defaultOutput = angularProjectDetected ? "src/app/sauron" : "outputs";
 
-	const template = `import type { SauronConfig } from "sauron";
+	const template = `import type { SauronConfig } from "@ygorazambuja/sauron";
 
 export default {
   // Use either "input" or "url". If both are set, "url" takes precedence.
