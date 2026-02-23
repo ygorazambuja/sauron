@@ -214,6 +214,83 @@ describe("CLI main", () => {
 		expect(axiosClientContent).toContain("fetchWithAxios");
 	});
 
+	test("should generate MCP server when using explicit mcp plugin", async () => {
+		writeFileSync(
+			"swagger.json",
+			JSON.stringify({
+				openapi: "3.0.4",
+				info: { title: "Plugin MCP API", version: "1.0.0" },
+				paths: {
+					"/api/users/{id}": {
+						get: {
+							operationId: "GetUserById",
+							parameters: [
+								{
+									name: "id",
+									in: "path",
+									required: true,
+									schema: { type: "integer" },
+								},
+							],
+						},
+					},
+				},
+			}),
+		);
+		Bun.argv = ["bun", "index.js", "--plugin", "mcp", "--input", "swagger.json"];
+
+		await main();
+
+		const mcpServerPath = join("outputs", "mcp", "index.ts");
+		const mcpReportPath = join("outputs", "mcp", "mcp-tools-report.json");
+		expect(existsSync(join("outputs", "models", "index.ts"))).toBe(true);
+		expect(existsSync(mcpServerPath)).toBe(true);
+		expect(existsSync(mcpReportPath)).toBe(true);
+		expect(logSpy).toHaveBeenCalledWith(
+			expect.stringContaining("MCP Tools (mcp): 1 tools"),
+		);
+	});
+
+	test("should generate MCP and fetch outputs when plugins are combined", async () => {
+		writeFileSync(
+			"swagger.json",
+			JSON.stringify({
+				openapi: "3.0.4",
+				info: { title: "Plugin Combo API", version: "1.0.0" },
+				paths: {
+					"/api/status": {
+						get: {
+							responses: {
+								"200": {
+									description: "Success",
+								},
+							},
+						},
+					},
+				},
+			}),
+		);
+		Bun.argv = [
+			"bun",
+			"index.js",
+			"--plugin",
+			"mcp",
+			"--plugin",
+			"fetch",
+			"--input",
+			"swagger.json",
+		];
+
+		await main();
+
+		expect(
+			existsSync(join("outputs", "mcp", "index.ts")),
+		).toBe(true);
+		expect(
+			existsSync(join("outputs", "http-client", "sauron-api.client.ts")),
+		).toBe(true);
+	});
+
 	test("should prioritize explicit plugin over --http/--angular aliases", async () => {
 		writeFileSync("angular.json", "{}");
 		writeFileSync(

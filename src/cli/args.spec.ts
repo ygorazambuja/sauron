@@ -129,6 +129,11 @@ describe("CLI args", () => {
 			expect(parseArgs().plugin).toEqual(["fetch", "angular"]);
 		});
 
+		test("should parse mcp plugin flag", () => {
+			Bun.argv = ["bun", "index.js", "--plugin", "mcp"];
+			expect(parseArgs().plugin).toEqual(["mcp"]);
+		});
+
 		test("should ignore init command when resolving positional input", () => {
 			Bun.argv = ["bun", "index.js", "init", "api.json"];
 			expect(parseArgs().input).toBe("api.json");
@@ -160,6 +165,7 @@ describe("CLI args", () => {
 				expect(output).toContain("USAGE:");
 				expect(output).toContain("COMMANDS:");
 				expect(output).toContain("EXAMPLES:");
+				expect(output).toContain("mcp");
 			} finally {
 				console.log = originalLog;
 			}

@@ -62,16 +62,32 @@ function canRun(_context: PluginContext): PluginCanRunResult {
  */
 function resolveOutputs(context: PluginContext): PluginOutputPaths {
 	const serviceDirectory = join(context.baseOutputPath, "http-client");
+	const servicePath = join(serviceDirectory, "sauron-api.axios-client.ts");
+	const reportPath = join(
+		serviceDirectory,
+		"missing-swagger-definitions.axios.json",
+	);
+	const typeCoverageReportPath = join(
+		serviceDirectory,
+		"type-coverage-report.axios.json",
+	);
 	return {
-		servicePath: join(serviceDirectory, "sauron-api.axios-client.ts"),
-		reportPath: join(
-			serviceDirectory,
-			"missing-swagger-definitions.axios.json",
-		),
-		typeCoverageReportPath: join(
-			serviceDirectory,
-			"type-coverage-report.axios.json",
-		),
+		artifacts: [
+			{ kind: "service", path: servicePath, label: "Axios HTTP client" },
+			{
+				kind: "report",
+				path: reportPath,
+				label: "Missing Swagger definitions report",
+			},
+			{
+				kind: "type-coverage",
+				path: typeCoverageReportPath,
+				label: "Type coverage report",
+			},
+		],
+		servicePath,
+		reportPath,
+		typeCoverageReportPath,
 	};
 }
 

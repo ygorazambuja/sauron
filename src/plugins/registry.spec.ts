@@ -7,7 +7,7 @@ import {
 
 describe("plugin registry", () => {
 	test("should expose default built-in plugin ids", () => {
-		expect(BUILTIN_PLUGIN_IDS).toEqual(["fetch", "angular", "axios"]);
+		expect(BUILTIN_PLUGIN_IDS).toEqual(["fetch", "angular", "axios", "mcp"]);
 	});
 
 	test("should resolve built-in plugin ids", () => {
@@ -15,6 +15,7 @@ describe("plugin registry", () => {
 		expect(registry.resolve("fetch")?.id).toBe("fetch");
 		expect(registry.resolve("angular")?.id).toBe("angular");
 		expect(registry.resolve("axios")?.id).toBe("axios");
+		expect(registry.resolve("mcp")?.id).toBe("mcp");
 	});
 
 	test("should resolve aliases", () => {
@@ -22,6 +23,7 @@ describe("plugin registry", () => {
 		expect(registry.resolve("ng")?.id).toBe("angular");
 		expect(registry.resolve("http-client")?.id).toBe("fetch");
 		expect(registry.resolve("ax")?.id).toBe("axios");
+		expect(registry.resolve("modelcontext")?.id).toBe("mcp");
 	});
 
 	test("should return undefined for unknown plugin", () => {
@@ -36,7 +38,11 @@ describe("plugin registry", () => {
 				aliases: ["c"],
 				kind: "http-client",
 				canRun: () => ({ ok: true }),
-				resolveOutputs: () => ({ servicePath: "", reportPath: "" }),
+				resolveOutputs: () => ({
+					artifacts: [],
+					servicePath: "",
+					reportPath: "",
+				}),
 				generate: async () => ({ files: [], methodCount: 0 }),
 			},
 		]);

@@ -1,5 +1,5 @@
 import { describe, expect, mock, spyOn, test } from "bun:test";
-import { runHttpPlugins } from "./runner";
+import { runPlugins } from "./runner";
 import { createPluginRegistry } from "./registry";
 
 describe("plugin runner", () => {
@@ -27,6 +27,16 @@ describe("plugin runner", () => {
 				kind: "http-client",
 				canRun: () => ({ ok: true }),
 				resolveOutputs: () => ({
+					artifacts: [
+						{
+							kind: "service",
+							path: "outputs/http-client/sauron-api.client.ts",
+						},
+						{
+							kind: "report",
+							path: "outputs/http-client/missing-swagger-definitions.json",
+						},
+					],
 					servicePath: "outputs/http-client/sauron-api.client.ts",
 					reportPath: "outputs/http-client/missing-swagger-definitions.json",
 				}),
@@ -46,13 +56,24 @@ describe("plugin runner", () => {
 			},
 		]);
 
-		const results = await runHttpPlugins(["fetch"], context as any, registry);
+		const results = await runPlugins(["fetch"], context as any, registry);
 
 		expect(results).toEqual([
 			{
 				requestedPluginId: "fetch",
 				executedPluginId: "fetch",
+				kind: "http-client",
 				methodCount: 1,
+				artifacts: [
+					{
+						kind: "service",
+						path: "outputs/http-client/sauron-api.client.ts",
+					},
+					{
+						kind: "report",
+						path: "outputs/http-client/missing-swagger-definitions.json",
+					},
+				],
 				servicePath: "outputs/http-client/sauron-api.client.ts",
 				reportPath: "outputs/http-client/missing-swagger-definitions.json",
 			},
@@ -87,7 +108,7 @@ describe("plugin runner", () => {
 					reason: "angular not available",
 					fallbackPluginId: "fetch",
 				}),
-				resolveOutputs: () => ({ servicePath: "", reportPath: "" }),
+				resolveOutputs: () => ({ artifacts: [], servicePath: "", reportPath: "" }),
 				generate: async () => ({ files: [], methodCount: 0 }),
 			},
 			{
@@ -95,6 +116,12 @@ describe("plugin runner", () => {
 				kind: "http-client",
 				canRun: () => ({ ok: true }),
 				resolveOutputs: () => ({
+					artifacts: [
+						{
+							kind: "service",
+							path: "outputs/http-client/sauron-api.client.ts",
+						},
+					],
 					servicePath: "outputs/http-client/sauron-api.client.ts",
 					reportPath: "outputs/http-client/missing-swagger-definitions.json",
 				}),
@@ -111,7 +138,7 @@ describe("plugin runner", () => {
 		]);
 
 		try {
-			const results = await runHttpPlugins(["angular"], context as any, registry);
+			const results = await runPlugins(["angular"], context as any, registry);
 			expect(results[0]?.executedPluginId).toBe("fetch");
 			expect(warnSpy).toHaveBeenCalledWith("angular not available");
 		} finally {
@@ -137,7 +164,7 @@ describe("plugin runner", () => {
 		};
 
 		const registry = createPluginRegistry([]);
-		await expect(runHttpPlugins(["missing"], context as any, registry)).rejects.toThrow(
+		await expect(runPlugins(["missing"], context as any, registry)).rejects.toThrow(
 			'Unknown plugin "missing".',
 		);
 	});

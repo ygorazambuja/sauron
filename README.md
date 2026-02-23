@@ -12,7 +12,7 @@ Este projeto converte automaticamente schemas OpenAPI/Swagger JSON em definiçõ
 - ✅ **Referências ($ref)**: Resolve referências entre schemas
 - ✅ **Datas**: Converte `format: "date-time"` para tipo `Date`
 - ✅ **Propriedades Obrigatórias**: Todas as propriedades definidas são obrigatórias por padrão
-- ✅ **Plugin system para geradores HTTP**: Plugins built-in `fetch`, `angular` e `axios`
+- ✅ **Plugin system para geradores**: Plugins built-in `fetch`, `angular`, `axios` e `mcp`
 - ✅ **Seleção explícita de plugin**: `--plugin <id>` (aceita múltiplos)
 - ✅ **Compatibilidade retroativa**: `--http` e `--angular` continuam funcionando como aliases
 - ✅ **Relatório de definições ausentes**: Cada plugin HTTP gera relatório com os pontos que viraram `any`
@@ -67,7 +67,7 @@ O comando irá:
 3. **Por padrão**: Gerar apenas interfaces TypeScript (models)
 4. **Com `--http`**: Gerar também métodos HTTP (fetch por padrão)
 5. **Com `--angular --http`**: Detectar projeto Angular e gerar serviço Angular
-6. **Com `--plugin <id>`**: Escolher explicitamente o plugin (`fetch`, `angular`, `axios`)
+6. **Com `--plugin <id>`**: Escolher explicitamente o plugin (`fetch`, `angular`, `axios`, `mcp`)
 7. **Com `--plugin angular` fora de projeto Angular**: fallback automático para `fetch`
 8. Salvar nos diretórios apropriados (`outputs/` ou `src/app/sauron/`)
 9. Gerar relatório de definições ausentes ao lado do cliente/serviço HTTP gerado
@@ -78,7 +78,7 @@ O comando irá:
 - **Sem flags**: Apenas models TypeScript
 - **`--http`**: Models + métodos HTTP com plugin padrão (`fetch`)
 - **`--angular --http`**: Models + serviço Angular (alias compatível)
-- **`--plugin <id>`**: Seleciona plugin HTTP explicitamente (`fetch`, `angular`, `axios`)
+- **`--plugin <id>`**: Seleciona plugin explicitamente (`fetch`, `angular`, `axios`, `mcp`)
 - **`--input arquivo.json`**: Especificar arquivo de entrada
 - **`--output diretorio`**: Diretório de saída customizado
 - **`--config arquivo.ts`**: Caminho para arquivo de configuração (padrão: `sauron.config.ts`)
@@ -99,7 +99,7 @@ import type { SauronConfig } from "@ygorazambuja/sauron";
 export default {
   input: "swagger.json",
   // url: "https://api.exemplo.com/openapi.json",
-  // plugin: ["fetch"], // fetch | angular | axios
+  // plugin: ["fetch"], // fetch | angular | axios | mcp
   output: "outputs",
   angular: false,
   http: true,
@@ -150,6 +150,21 @@ outputs/
     ├── type-coverage-report.json          # Cobertura de tipos (plugin fetch)
     ├── missing-swagger-definitions.axios.json # Relatório (plugin axios)
     └── type-coverage-report.axios.json    # Cobertura de tipos (plugin axios)
+
+outputs/
+└── mcp/                                    # Quando plugin mcp
+    ├── index.ts                            # Entrypoint do servidor MCP (STDIO)
+    ├── server.ts                           # Factory do servidor MCP
+    ├── client/
+    │   └── api.client.ts                   # Cliente HTTP base com auth
+    ├── tools/
+    │   └── *.tool.ts                       # Uma tool por recurso
+    ├── types/
+    │   └── *.types.ts                      # Tipos de input/action por recurso
+    ├── schemas/
+    │   └── *.schema.ts                     # JSON Schema por recurso
+    ├── mcp-tools-report.json               # Inventário de tools/actions geradas
+    └── README.md                           # Guia do output MCP gerado
 
 src/app/sauron/
 ├── models/
@@ -391,6 +406,28 @@ const result = await api.GetLaboratorioWithParams("search", 1, 10);
 console.log(result);
 ```
 
+### Servidor MCP (STDIO)
+
+```bash
+sauron swagger.json --plugin mcp
+```
+
+Gera models + servidor MCP em `outputs/mcp/index.ts`.
+Também gera `outputs/mcp/mcp-tools-report.json`.
+
+Variáveis de ambiente suportadas no servidor gerado:
+
+- `API_BASE_URL` (obrigatória)
+- `API_TOKEN` (opcional, Bearer token)
+- `API_KEY` (opcional, API Key)
+- `API_KEY_HEADER` (opcional, default `x-api-key`)
+
+Execução:
+
+```bash
+bun run ./outputs/mcp/index.ts
+```
+
 ### Serviço Angular
 
 ```bash
@@ -513,11 +550,12 @@ Esse relatório mostra:
 
 ## Sistema de Plugins
 
-Plugins HTTP built-in:
+Plugins built-in:
 
 - `fetch`
 - `angular`
 - `axios`
+- `mcp`
 
 Exemplos:
 
@@ -525,6 +563,7 @@ Exemplos:
 sauron swagger.json --plugin fetch
 sauron swagger.json --plugin angular
 sauron swagger.json --plugin axios
+sauron swagger.json --plugin mcp
 ```
 
 Para criar novos plugins, veja `docs/plugins.md`.

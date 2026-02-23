@@ -6,7 +6,7 @@ import type { OperationTypeMap, TypeNameMap } from "../utils";
 /**
  * Plugin kind.
  */
-export type PluginKind = "http-client";
+export type PluginKind = "http-client" | "mcp-server";
 
 /**
  * Plugin can run success result.
@@ -40,9 +40,19 @@ export type PluginFile = {
 /**
  * Plugin output paths.
  */
+export type PluginOutputArtifact = {
+	kind: "service" | "report" | "type-coverage" | "manifest" | "other";
+	path: string;
+	label?: string;
+};
+
+/**
+ * Plugin output paths.
+ */
 export type PluginOutputPaths = {
-	servicePath: string;
-	reportPath: string;
+	artifacts: PluginOutputArtifact[];
+	servicePath?: string;
+	reportPath?: string;
 	typeCoverageReportPath?: string;
 };
 
@@ -90,8 +100,10 @@ export interface SauronPlugin {
 export type PluginExecutionResult = {
 	requestedPluginId: string;
 	executedPluginId: string;
+	kind: PluginKind;
 	methodCount: number;
-	servicePath: string;
-	reportPath: string;
+	artifacts: PluginOutputArtifact[];
+	servicePath?: string;
+	reportPath?: string;
 	typeCoverageReportPath?: string;
 };

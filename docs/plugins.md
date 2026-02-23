@@ -1,17 +1,17 @@
 # Plugin Development Guide
 
-Este guia descreve como criar um novo plugin HTTP no Sauron.
+Este guia descreve como criar um novo plugin no Sauron.
 
 ## Visao geral
 
-O plugin system atual cobre geracao HTTP. O fluxo principal esta em:
+O plugin system atual cobre geracao HTTP e MCP server. O fluxo principal esta em:
 
 - `src/plugins/types.ts`
 - `src/plugins/registry.ts`
 - `src/plugins/runner.ts`
 - `src/plugins/builtin/`
 
-O `main` gera models no core e delega clientes HTTP ao `runHttpPlugins`.
+O `main` gera models no core e delega artefatos aos plugins via `runPlugins`.
 
 ## Contrato do plugin
 
@@ -19,9 +19,9 @@ Todo plugin deve implementar `SauronPlugin` (em `src/plugins/types.ts`):
 
 - `id: string`
 - `aliases?: string[]`
-- `kind: "http-client"`
+- `kind: "http-client" | "mcp-server"`
 - `canRun(context): { ok: true } | { ok: false; reason: string; fallbackPluginId?: string }`
-- `resolveOutputs(context): { servicePath: string; reportPath: string }`
+- `resolveOutputs(context): { artifacts: Array<{ kind: string; path: string; label?: string }>; ... }`
 - `generate(context): Promise<{ files: Array<{ path: string; content: string }>; methodCount: number }>`
 
 `PluginContext` oferece os dados necessarios:
@@ -80,6 +80,10 @@ function canRun(_context: PluginContext): PluginCanRunResult {
 function resolveOutputs(context: PluginContext): PluginOutputPaths {
 	const serviceDirectory = join(context.baseOutputPath, "http-client");
 	return {
+		artifacts: [
+			{ kind: "service", path: join(serviceDirectory, "sauron-api.example-client.ts") },
+			{ kind: "report", path: join(serviceDirectory, "missing-swagger-definitions.example.json") },
+		],
 		servicePath: join(serviceDirectory, "sauron-api.example-client.ts"),
 		reportPath: join(serviceDirectory, "missing-swagger-definitions.example.json"),
 	};
@@ -135,6 +139,7 @@ Exemplo (plugin angular):
 - `src/plugins/registry.spec.ts`
 - `src/plugins/runner.spec.ts`
 - `src/cli/main.spec.ts`
+- `src/plugins/builtin/mcp.spec.ts`
 
 Cenarios minimos:
 

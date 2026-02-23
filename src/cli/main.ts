@@ -6,7 +6,8 @@ import {
 	readJsonFile,
 	verifySwaggerComposition,
 } from "../utils";
-import { runHttpPlugins } from "../plugins/runner";
+import { runPlugins } from "../plugins/runner";
+import type { PluginExecutionResult } from "../plugins/types";
 import { parseArgs, parseCommand, showHelp } from "./args";
 import {
 	createGeneratedFileHeader,
@@ -89,7 +90,7 @@ export async function main() {
 		);
 		writeFileSync(modelsPath, formattedModels);
 
-		const pluginResults = await runHttpPlugins(requestedPluginIds, {
+		const pluginResults = await runPlugins(requestedPluginIds, {
 			schema,
 			options,
 			baseOutputPath,
@@ -108,7 +109,7 @@ export async function main() {
 
 		console.log("\n✅ Generation complete!");
 		console.log(`📄 Models: ${models.length} TypeScript interfaces/types`);
-		logPluginMethodSummary(pluginResults);
+		logPluginSummary(pluginResults);
 		console.log(`📁 Output: ${resolveOutputDisplayPath(options, angularDetected, preferAngularOutput)}`);
 	} catch (error) {
 		console.error("❌ Error:", error);
@@ -215,30 +216,42 @@ function logPluginCompatibilityNotice(
  * logPluginReports([]);
  * ```
  */
-function logPluginReports(
-	pluginResults: Array<{ reportPath: string; typeCoverageReportPath?: string }>,
-): void {
+function logPluginReports(pluginResults: PluginExecutionResult[]): void {
 	for (const result of pluginResults) {
-		console.log(`🧾 Missing Swagger definitions report: ${result.reportPath}`);
-		if (!result.typeCoverageReportPath) {
-			continue;
+		for (const artifact of result.artifacts) {
+			if (artifact.kind === "report") {
+				console.log(`🧾 Report (${result.executedPluginId}): ${artifact.path}`);
+				continue;
+			}
+			if (artifact.kind === "type-coverage") {
+				console.log(
+					`📊 Type coverage (${result.executedPluginId}): ${artifact.path}`,
+				);
+				continue;
+			}
+			if (artifact.kind === "manifest") {
+				console.log(`🧾 Manifest (${result.executedPluginId}): ${artifact.path}`);
+			}
 		}
-		console.log(`📊 Type coverage report: ${result.typeCoverageReportPath}`);
 	}
 }
 
 /**
- * Log plugin method summary.
+ * Log plugin summary.
  * @param pluginResults Input parameter `pluginResults`.
  * @example
  * ```ts
- * logPluginMethodSummary([]);
+ * logPluginSummary([]);
  * ```
  */
-function logPluginMethodSummary(
-	pluginResults: Array<{ executedPluginId: string; methodCount: number }>,
-): void {
+function logPluginSummary(pluginResults: PluginExecutionResult[]): void {
 	for (const result of pluginResults) {
+		if (result.kind === "mcp-server") {
+			console.log(
+				`🧩 MCP Tools (${result.executedPluginId}): ${result.methodCount} tools`,
+			);
+			continue;
+		}
 		console.log(
 			`🔗 HTTP Methods (${result.executedPluginId}): ${result.methodCount} methods`,
 		);

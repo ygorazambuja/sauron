@@ -65,10 +65,29 @@ function canRun(_context: PluginContext): PluginCanRunResult {
  */
 function resolveOutputs(context: PluginContext): PluginOutputPaths {
 	const serviceDirectory = join(context.baseOutputPath, "http-client");
+	const servicePath = join(serviceDirectory, "sauron-api.client.ts");
+	const reportPath = join(serviceDirectory, "missing-swagger-definitions.json");
+	const typeCoverageReportPath = join(
+		serviceDirectory,
+		"type-coverage-report.json",
+	);
 	return {
-		servicePath: join(serviceDirectory, "sauron-api.client.ts"),
-		reportPath: join(serviceDirectory, "missing-swagger-definitions.json"),
-		typeCoverageReportPath: join(serviceDirectory, "type-coverage-report.json"),
+		artifacts: [
+			{ kind: "service", path: servicePath, label: "Fetch HTTP client" },
+			{
+				kind: "report",
+				path: reportPath,
+				label: "Missing Swagger definitions report",
+			},
+			{
+				kind: "type-coverage",
+				path: typeCoverageReportPath,
+				label: "Type coverage report",
+			},
+		],
+		servicePath,
+		reportPath,
+		typeCoverageReportPath,
 	};
 }
 

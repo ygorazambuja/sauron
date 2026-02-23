@@ -136,7 +136,7 @@ OPTIONS:
   -u, --url <url>        Download OpenAPI/Swagger JSON from URL
   -a, --angular          Generate Angular service in src/app/sauron (requires Angular project)
   -t, --http             Generate HTTP client/service methods
-  -p, --plugin <id>      HTTP plugin to run (repeatable: fetch, angular, axios)
+  -p, --plugin <id>      Plugin to run (repeatable: fetch, angular, axios, mcp)
   -o, --output <dir>     Output directory (default: outputs or src/app/sauron)
   -c, --config <file>    Config file path (default: sauron.config.ts)
   -h, --help            Show this help message
@@ -153,6 +153,7 @@ EXAMPLES:
   sauron --http -i api.json -o ./generated
   sauron --plugin fetch -i api.json
   sauron --plugin axios -i api.json
+  sauron --plugin mcp -i openapi.json
   sauron --plugin angular --plugin fetch -i api.json
 
 When --angular flag is used, the tool will:

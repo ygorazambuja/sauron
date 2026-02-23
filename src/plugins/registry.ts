@@ -1,12 +1,13 @@
 import { createAngularPlugin } from "./builtin/angular";
 import { createAxiosPlugin } from "./builtin/axios";
 import { createFetchPlugin } from "./builtin/fetch";
+import { createMcpPlugin } from "./builtin/mcp";
 import type { SauronPlugin } from "./types";
 
 /**
  * Built-in plugin IDs.
  */
-export const BUILTIN_PLUGIN_IDS = ["fetch", "angular", "axios"] as const;
+export const BUILTIN_PLUGIN_IDS = ["fetch", "angular", "axios", "mcp"] as const;
 
 /**
  * Plugin registry.
@@ -56,6 +57,7 @@ export function createDefaultPluginRegistry(): PluginRegistry {
 		createFetchPlugin(),
 		createAngularPlugin(),
 		createAxiosPlugin(),
+		createMcpPlugin(),
 	]);
 }
 

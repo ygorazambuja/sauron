@@ -4,24 +4,26 @@ import { createDefaultPluginRegistry, type PluginRegistry } from "./registry";
 import type {
 	PluginCanRunFailure,
 	PluginContext,
+	PluginOutputArtifact,
+	PluginOutputPaths,
 	PluginExecutionResult,
 	PluginFile,
 	SauronPlugin,
 } from "./types";
 
 /**
- * Run HTTP plugins.
+ * Run plugins.
  * @param requestedPluginIds Input parameter `requestedPluginIds`.
  * @param context Input parameter `context`.
  * @param registry Input parameter `registry`.
- * @returns Run HTTP plugins output as `Promise<PluginExecutionResult[]>`.
+ * @returns Run plugins output as `Promise<PluginExecutionResult[]>`.
  * @example
  * ```ts
- * const result = await runHttpPlugins([], {} as PluginContext);
+ * const result = await runPlugins([], {} as PluginContext);
  * // result: PluginExecutionResult[]
  * ```
  */
-export async function runHttpPlugins(
+export async function runPlugins(
 	requestedPluginIds: string[],
 	context: PluginContext,
 	registry = createDefaultPluginRegistry(),
@@ -42,13 +44,20 @@ export async function runHttpPlugins(
 		const outputPaths = executablePlugin.resolveOutputs(context);
 		const generated = await executablePlugin.generate(context);
 		await writePluginFiles(generated.files, context);
+		const artifacts = resolveArtifacts(outputPaths, generated.files);
 		const result: PluginExecutionResult = {
 			requestedPluginId,
 			executedPluginId: executablePlugin.id,
+			kind: executablePlugin.kind,
 			methodCount: generated.methodCount,
-			servicePath: outputPaths.servicePath,
-			reportPath: outputPaths.reportPath,
+			artifacts,
 		};
+		if (outputPaths.servicePath) {
+			result.servicePath = outputPaths.servicePath;
+		}
+		if (outputPaths.reportPath) {
+			result.reportPath = outputPaths.reportPath;
+		}
 		if (outputPaths.typeCoverageReportPath) {
 			result.typeCoverageReportPath = outputPaths.typeCoverageReportPath;
 		}
@@ -171,4 +180,49 @@ async function writePluginFiles(
 		mkdirSync(dirname(file.path), { recursive: true });
 		await context.writeFormattedFile(file.path, file.content);
 	}
+}
+
+/**
+ * Resolve output artifacts.
+ * @param outputPaths Input parameter `outputPaths`.
+ * @param files Input parameter `files`.
+ * @returns Resolve output artifacts output as `PluginOutputArtifact[]`.
+ * @example
+ * ```ts
+ * const result = resolveArtifacts({ artifacts: [] }, []);
+ * // result: PluginOutputArtifact[]
+ * ```
+ */
+function resolveArtifacts(
+	outputPaths: PluginOutputPaths,
+	files: PluginFile[],
+): PluginOutputArtifact[] {
+	if (outputPaths.artifacts.length > 0) {
+		return outputPaths.artifacts;
+	}
+
+	return files.map((file) => ({
+		kind: "other",
+		path: file.path,
+	}));
+}
+
+/**
+ * Run HTTP plugins.
+ * @param requestedPluginIds Input parameter `requestedPluginIds`.
+ * @param context Input parameter `context`.
+ * @param registry Input parameter `registry`.
+ * @returns Run HTTP plugins output as `Promise<PluginExecutionResult[]>`.
+ * @example
+ * ```ts
+ * const result = await runHttpPlugins([], {} as PluginContext);
+ * // result: PluginExecutionResult[]
+ * ```
+ */
+export async function runHttpPlugins(
+	requestedPluginIds: string[],
+	context: PluginContext,
+	registry = createDefaultPluginRegistry(),
+): Promise<PluginExecutionResult[]> {
+	return runPlugins(requestedPluginIds, context, registry);
 }
