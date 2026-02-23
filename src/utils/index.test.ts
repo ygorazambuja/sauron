@@ -712,6 +712,60 @@ describe("OpenAPI to TypeScript Converter Utilities", () => {
 			expect(imports).toContain("TipoDeOperacaoContratoEnum");
 		});
 
+		test("should generate delete with request body inside options object", () => {
+			const openApiSchema = {
+				openapi: "3.0.4",
+				info: { title: "Test API", version: "1.0.0" },
+				paths: {
+					"/api/ConsorcioPublicoEmpenho/{id}": {
+						delete: {
+							tags: ["ConsorcioPublicoEmpenho"],
+							parameters: [
+								{
+									name: "id",
+									in: "path",
+									required: true,
+									schema: { type: "string" },
+								},
+							],
+							requestBody: {
+								content: {
+									"application/json": {
+										schema: {
+											$ref: "#/components/schemas/ConsorcioPublicoEmpenhoDto",
+										},
+									},
+								},
+							},
+							responses: {
+								"200": { description: "Success" },
+							},
+						},
+					},
+				},
+				components: {
+					schemas: {
+						ConsorcioPublicoEmpenhoDto: {
+							type: "object",
+							properties: {
+								id: { type: "string" },
+							},
+						},
+					},
+				},
+			};
+
+			const { methods } = createAngularHttpClientMethods(openApiSchema);
+			const method = methods.find((m) =>
+				m.includes("DeleteConsorcioPublicoEmpenhoById"),
+			);
+
+			expect(method).toContain("id: string, body: ConsorcioPublicoEmpenhoDto");
+			expect(method).toContain(
+				"return this.httpClient.delete<any>(`/api/ConsorcioPublicoEmpenho/${id}`, { body });",
+			);
+		});
+
 		test("should fallback to request type when response schema is missing", () => {
 			const openApiSchema = {
 				openapi: "3.0.4",

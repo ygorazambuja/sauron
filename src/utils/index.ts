@@ -1213,9 +1213,27 @@ function generateMethodBody(
 	const hasQueryParams = queryParams.length > 0;
 	const hasBody = !!operation.requestBody;
 	const requiresBody = ["post", "put", "patch"].includes(httpMethod);
+	const bodyVarName = paramInfo.bodyParam?.varName || "body";
+	const bodyOption = bodyVarName === "body" ? "body" : `body: ${bodyVarName}`;
+
+	if (httpMethod === "delete") {
+		if (hasQueryParams && hasBody) {
+			args.push(`{ ${bodyOption}, params: { ...params } }`);
+			return `    return ${httpClientMethod}(${args.join(", ")});`;
+		}
+		if (hasBody) {
+			args.push(`{ ${bodyOption} }`);
+			return `    return ${httpClientMethod}(${args.join(", ")});`;
+		}
+		if (hasQueryParams) {
+			args.push(`{ params: { ...params } }`);
+			return `    return ${httpClientMethod}(${args.join(", ")});`;
+		}
+		return `    return ${httpClientMethod}(${args.join(", ")});`;
+	}
 
 	if (hasBody) {
-		args.push(paramInfo.bodyParam?.varName || "body");
+		args.push(bodyVarName);
 	} else if (requiresBody) {
 		args.push("null");
 	}
