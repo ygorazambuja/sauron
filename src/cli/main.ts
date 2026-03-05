@@ -83,7 +83,9 @@ export async function main() {
 
 		console.log("🔧 Generating TypeScript models...");
 		const { models, operationTypes, typeNameMap } =
-			createModelsWithOperationTypes(schema);
+			createModelsWithOperationTypes(schema, {
+				shortNames: options.shortNames,
+			});
 		const formattedModels = await formatGeneratedFile(
 			`${fileHeader}\n${models.join("\n")}`,
 			modelsPath,

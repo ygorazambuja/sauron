@@ -64,6 +64,13 @@ export function parseArgs(): CliOptions {
 				type: "string",
 				short: "c",
 			},
+			"short-names": {
+				type: "boolean",
+				short: "s",
+			},
+			"no-short-names": {
+				type: "boolean",
+			},
 			help: {
 				type: "boolean",
 				short: "h",
@@ -77,6 +84,7 @@ export function parseArgs(): CliOptions {
 		input: "swagger.json",
 		angular: false,
 		http: false,
+		shortNames: true,
 		help: false,
 	};
 
@@ -100,6 +108,11 @@ export function parseArgs(): CliOptions {
 	}
 	if (values.config) {
 		options.config = values.config;
+	}
+	if (values["no-short-names"]) {
+		options.shortNames = false;
+	} else if (values["short-names"] !== undefined) {
+		options.shortNames = values["short-names"];
 	}
 	if (values.help) {
 		options.help = values.help;
@@ -139,6 +152,8 @@ OPTIONS:
   -p, --plugin <id>      Plugin to run (repeatable: fetch, angular, axios, mcp)
   -o, --output <dir>     Output directory (default: outputs or src/app/sauron)
   -c, --config <file>    Config file path (default: sauron.config.ts)
+  -s, --short-names      Use short type names, e.g. CronogramaPagamentoItemDto instead of SiaficDividaCoreDTOsCronogramaPagamentoItemDto (default: true)
+      --no-short-names   Use full namespace-based type names
   -h, --help            Show this help message
 
 COMMANDS:

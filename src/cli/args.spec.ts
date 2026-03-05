@@ -22,6 +22,7 @@ describe("CLI args", () => {
 				input: "swagger.json",
 				angular: false,
 				http: false,
+				shortNames: true,
 				help: false,
 			});
 		});
@@ -78,6 +79,7 @@ describe("CLI args", () => {
 				angular: true,
 				http: true,
 				output: "./dist",
+				shortNames: true,
 				help: false,
 			});
 		});

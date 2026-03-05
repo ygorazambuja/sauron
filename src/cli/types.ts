@@ -6,6 +6,7 @@ export interface CliOptions {
 	plugin?: string[];
 	output?: string;
 	config?: string;
+	shortNames: boolean;
 	help: boolean;
 }
 
@@ -16,6 +17,7 @@ export interface SauronConfig {
 	http?: boolean;
 	plugin?: string[];
 	output?: string;
+	shortNames?: boolean;
 }
 
 export const DEFAULT_CONFIG_FILE = "sauron.config.ts";

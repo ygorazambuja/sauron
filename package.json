@@ -1,6 +1,6 @@
 {
   "name": "@ygorazambuja/sauron",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "OpenAPI to TypeScript/Angular Converter - Generate TypeScript interfaces and Angular HTTP services from Swagger/OpenAPI specs",
   "main": "src/index.ts",
   "files": [

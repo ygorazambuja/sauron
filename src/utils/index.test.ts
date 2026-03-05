@@ -243,6 +243,43 @@ describe("OpenAPI to TypeScript Converter Utilities", () => {
 
 			const result = createModels(openApiSchema);
 			const dtoInterface = result.find((r) =>
+				r.includes("interface Dto"),
+			);
+			const childInterface = result.find((r) =>
+				r.includes("interface Child"),
+			);
+
+			expect(dtoInterface).toContain("child: Child;");
+			expect(childInterface).toContain("id: number;");
+		});
+
+		test("should use full namespace names when shortNames is false", () => {
+			const openApiSchema = {
+				openapi: "3.0.4",
+				info: { title: "Test API", version: "1.0.0" },
+				paths: {},
+				components: {
+					schemas: {
+						"Base.Library.Dto": {
+							type: "object",
+							properties: {
+								child: {
+									$ref: "#/components/schemas/Base.Library.Child",
+								},
+							},
+						},
+						"Base.Library.Child": {
+							type: "object",
+							properties: {
+								id: { type: "integer" },
+							},
+						},
+					},
+				},
+			};
+
+			const result = createModels(openApiSchema, { shortNames: false });
+			const dtoInterface = result.find((r) =>
 				r.includes("interface BaseLibraryDto"),
 			);
 			const childInterface = result.find((r) =>

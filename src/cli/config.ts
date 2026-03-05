@@ -123,6 +123,7 @@ export default {
   input: "swagger.json",
   // url: "https://example.com/openapi.json",
   // plugin: ["fetch"],
+  // shortNames: true, // Use short type names (e.g. CronogramaPagamentoItemDto instead of SiaficDividaCoreDTOsCronogramaPagamentoItemDto)
   output: "${defaultOutput}",
   angular: ${angularProjectDetected},
   http: true,
@@ -197,6 +198,7 @@ export function mergeOptionsWithConfig(
 		plugin: mergedPlugins,
 		output: options.output ?? config.output,
 		config: options.config,
+		shortNames: config.shortNames ?? options.shortNames,
 		help: options.help,
 	};
 }

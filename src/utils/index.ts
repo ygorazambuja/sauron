@@ -180,8 +180,9 @@ export function verifySwaggerComposition(
  */
 export function createModels(
 	data: z.infer<typeof SwaggerOrOpenAPISchema>,
+	options?: { shortNames?: boolean },
 ): string[] {
-	const { models } = createModelsWithOperationTypes(data);
+	const { models } = createModelsWithOperationTypes(data, options);
 	return models;
 }
 
@@ -197,17 +198,22 @@ export function createModels(
  */
 export function createModelsWithOperationTypes(
 	data: z.infer<typeof SwaggerOrOpenAPISchema>,
+	options?: { shortNames?: boolean },
 ): {
 	models: string[];
 	operationTypes: OperationTypeMap;
 	typeNameMap: TypeNameMap;
 } {
+	const shortNames = options?.shortNames ?? true;
 	// Handle both OpenAPI 3.0+ (components.schemas) and Swagger 2.0 (definitions)
 	const schemas =
 		(data as any).components?.schemas || (data as any).definitions;
 	const schemaEntries = schemas ? Object.entries(schemas) : [];
 	const typeDefinitions: string[] = [];
-	const { typeNameMap, usedTypeNames } = createTypeNameMap(schemas);
+	const { typeNameMap, usedTypeNames } = createTypeNameMap(
+		schemas,
+		shortNames,
+	);
 
 	if (!schemas) {
 		console.warn("Warning: No schema definitions found in OpenAPI components");
@@ -341,8 +347,14 @@ function toPascalCase(value: string): string {
  * // result: string
  * ```
  */
-function sanitizeTypeName(value: string): string {
-	const sanitized = toPascalCase(value);
+function extractShortName(value: string): string {
+	const parts = value.split(".");
+	return parts[parts.length - 1] || value;
+}
+
+function sanitizeTypeName(value: string, shortNames = false): string {
+	const input = shortNames ? extractShortName(value) : value;
+	const sanitized = toPascalCase(input);
 	return sanitized || "Type";
 }
 
@@ -357,8 +369,12 @@ function sanitizeTypeName(value: string): string {
  * // result: string
  * ```
  */
-function resolveTypeName(value: string, typeNameMap?: TypeNameMap): string {
-	return typeNameMap?.get(value) ?? sanitizeTypeName(value);
+function resolveTypeName(
+	value: string,
+	typeNameMap?: TypeNameMap,
+	shortNames = false,
+): string {
+	return typeNameMap?.get(value) ?? sanitizeTypeName(value, shortNames);
 }
 
 /**
@@ -371,7 +387,10 @@ function resolveTypeName(value: string, typeNameMap?: TypeNameMap): string {
  * // result: unknown
  * ```
  */
-function createTypeNameMap(schemas?: Record<string, OpenApiSchema>): {
+function createTypeNameMap(
+	schemas?: Record<string, OpenApiSchema>,
+	shortNames = false,
+): {
 	typeNameMap: TypeNameMap;
 	usedTypeNames: Set<string>;
 } {
@@ -383,7 +402,7 @@ function createTypeNameMap(schemas?: Record<string, OpenApiSchema>): {
 	}
 
 	for (const modelName of Object.keys(schemas)) {
-		const sanitizedName = sanitizeTypeName(modelName);
+		const sanitizedName = sanitizeTypeName(modelName, shortNames);
 		const uniqueName = makeUniqueTypeName(sanitizedName, usedTypeNames);
 		typeNameMap.set(modelName, uniqueName);
 	}

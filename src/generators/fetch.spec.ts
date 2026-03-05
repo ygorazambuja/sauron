@@ -316,8 +316,8 @@ describe("Fetch generator", () => {
 				operationTypes,
 				typeNameMap,
 			);
-			expect(methods[0]).toContain("body: BaseLibraryDto");
-			expect(methods[0]).toContain("Promise<BaseLibraryDto>");
+			expect(methods[0]).toContain("body: Dto");
+			expect(methods[0]).toContain("Promise<Dto>");
 		});
 
 		test("should handle no paths and multiple HTTP methods", () => {
