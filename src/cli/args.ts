@@ -152,7 +152,7 @@ OPTIONS:
   -p, --plugin <id>      Plugin to run (repeatable: fetch, angular, axios, mcp)
   -o, --output <dir>     Output directory (default: outputs or src/app/sauron)
   -c, --config <file>    Config file path (default: sauron.config.ts)
-  -s, --short-names      Use short type names, e.g. CronogramaPagamentoItemDto instead of SiaficDividaCoreDTOsCronogramaPagamentoItemDto (default: true)
+  -s, --short-names      Use short type names, e.g. ProductDto instead of MyAppCoreDTOsProductDto (default: true)
       --no-short-names   Use full namespace-based type names
   -h, --help            Show this help message
 
@@ -163,7 +163,7 @@ EXAMPLES:
   sauron init
   sauron --config ./sauron.config.ts
   sauron swagger.json
-  sauron --input swaggerAfEstoque.json --angular --http
+  sauron --input api.json --angular --http
   sauron --url https://api.example.com/swagger.json --http
   sauron --http -i api.json -o ./generated
   sauron --plugin fetch -i api.json

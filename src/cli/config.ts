@@ -123,7 +123,7 @@ export default {
   input: "swagger.json",
   // url: "https://example.com/openapi.json",
   // plugin: ["fetch"],
-  // shortNames: true, // Use short type names (e.g. CronogramaPagamentoItemDto instead of SiaficDividaCoreDTOsCronogramaPagamentoItemDto)
+  // shortNames: true, // Use short type names (e.g. ProductDto instead of MyAppCoreDTOsProductDto)
   output: "${defaultOutput}",
   angular: ${angularProjectDetected},
   http: true,

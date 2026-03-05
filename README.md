@@ -12,6 +12,7 @@ Este projeto converte automaticamente schemas OpenAPI/Swagger JSON em definiçõ
 - ✅ **Referências ($ref)**: Resolve referências entre schemas
 - ✅ **Datas**: Converte `format: "date-time"` para tipo `Date`
 - ✅ **Propriedades Obrigatórias**: Todas as propriedades definidas são obrigatórias por padrão
+- ✅ **Nomes curtos de tipo**: Extrai automaticamente o nome curto de schemas com namespace (ex: `MyApp.Core.DTOs.ProductDto` → `ProductDto`)
 - ✅ **Plugin system para geradores**: Plugins built-in `fetch`, `angular`, `axios` e `mcp`
 - ✅ **Seleção explícita de plugin**: `--plugin <id>` (aceita múltiplos)
 - ✅ **Compatibilidade retroativa**: `--http` e `--angular` continuam funcionando como aliases
@@ -28,7 +29,7 @@ Após compilar o projeto, você pode usar o binário executável diretamente:
 bun build --compile ./src/index.ts --outfile sauron
 
 # Usar o binário
-./sauron --input swaggerAfEstoque.json --angular --http
+./sauron --input swagger.json --angular --http
 ```
 
 ### Opção 2: Desenvolvimento com Bun
@@ -44,7 +45,7 @@ bun run cli -- init
 bun run src/index.ts
 
 # Ou usar o CLI wrapper
-bun run cli --input swaggerAfEstoque.json --angular
+bun run cli --input swagger.json --angular
 ```
 
 ### Executar Testes
@@ -82,6 +83,8 @@ O comando irá:
 - **`--input arquivo.json`**: Especificar arquivo de entrada
 - **`--output diretorio`**: Diretório de saída customizado
 - **`--config arquivo.ts`**: Caminho para arquivo de configuração (padrão: `sauron.config.ts`)
+- **`--short-names` / `-s`**: Usa nomes curtos de tipo, ex: `ProductDto` em vez de `MyAppCoreDTOsProductDto` (padrão: `true`)
+- **`--no-short-names`**: Usa nomes completos com namespace (comportamento legado)
 
 Regras de precedência:
 
@@ -100,6 +103,7 @@ export default {
   input: "swagger.json",
   // url: "https://api.exemplo.com/openapi.json",
   // plugin: ["fetch"], // fetch | angular | axios | mcp
+  // shortNames: true, // Nomes curtos de tipo, ex: ProductDto em vez de MyAppCoreDTOsProductDto (padrão: true)
   output: "outputs",
   angular: false,
   http: true,
@@ -181,11 +185,11 @@ src/app/sauron/
 
 ```json
 {
-  "MesValorIndexadorDto": {
+  "ProductDto": {
     "type": "object",
     "properties": {
-      "dominioMesID": { "type": "integer" },
-      "valor": { "type": "number" }
+      "categoryId": { "type": "integer" },
+      "price": { "type": "number" }
     }
   }
 }
@@ -194,9 +198,9 @@ src/app/sauron/
 **Resultado TypeScript:**
 
 ```typescript
-export interface MesValorIndexadorDto {
-  dominioMesID: number;
-  valor: number;
+export interface ProductDto {
+  categoryId: number;
+  price: number;
 }
 ```
 
@@ -224,15 +228,68 @@ Valida dados OpenAPI/Swagger contra o schema esperado.
 
 **Lança:** Error se a validação falhar
 
-### `createModels(openApiSchema): string[]`
+### `createModels(openApiSchema, options?): string[]`
 
 Gera definições TypeScript a partir de schemas OpenAPI.
 
 **Parâmetros:**
 
 - `openApiSchema`: Schema OpenAPI validado
+- `options?.shortNames`: Usar nomes curtos de tipo (padrão: `true`)
 
 **Retorna:** Array de strings com definições TypeScript
+
+## Nomes Curtos de Tipo (`shortNames`)
+
+Muitas APIs .NET expõem schemas com namespace completo no Swagger, como:
+
+```
+MyApp.Core.DTOs.ProductDto
+Acme.Shared.Models.UserDto
+```
+
+Por padrão (`shortNames: true`), o Sauron extrai apenas o último segmento do nome, gerando tipos mais limpos:
+
+| Schema no Swagger | `shortNames: true` (padrão) | `shortNames: false` (legado) |
+| --- | --- | --- |
+| `MyApp.Core.DTOs.ProductDto` | `ProductDto` | `MyAppCoreDTOsProductDto` |
+| `Acme.Shared.Models.UserDto` | `UserDto` | `AcmeSharedModelsUserDto` |
+| `OrderDto` | `OrderDto` | `OrderDto` |
+
+Em caso de colisão de nomes curtos (ex: dois namespaces com mesmo sufixo `UserDto`), o Sauron adiciona um sufixo numérico automaticamente (`UserDto`, `UserDto2`).
+
+### Configuração
+
+Via CLI:
+
+```bash
+# Nomes curtos (padrão)
+sauron swagger.json
+
+# Nomes completos (comportamento legado)
+sauron swagger.json --no-short-names
+```
+
+Via arquivo de configuração:
+
+```ts
+export default {
+  input: "swagger.json",
+  shortNames: false, // usar nomes completos com namespace
+} satisfies SauronConfig;
+```
+
+Via uso programático:
+
+```ts
+import { createModels } from "@ygorazambuja/sauron";
+
+// Nomes curtos (padrão)
+const models = createModels(schema);
+
+// Nomes completos
+const models = createModels(schema, { shortNames: false });
+```
 
 ## Regras de Conversão
 
@@ -293,7 +350,7 @@ Além dos tipos TypeScript, o projeto também gera um serviço Angular completo 
 import { Injectable, inject } from "@angular/core";
 import { HttpClient } from "@angular/common/http";
 import { Observable } from "rxjs";
-import { LaboratorioDtoResultPaginateFilterDto, LaboratorioDto } from "../models";
+import { ProductPaginatedResultDto, ProductDto } from "../models";
 
 @Injectable({
   providedIn: "root"
@@ -304,31 +361,31 @@ export class SauronApiService {
   // Padrão: Get{Resource}{Modifier}
 
   // Retorna Observable<any> quando não há schema definido
-  GetApiGenerica(): Observable<any> {
-    return this.httpClient.get("/api/ApiGenerica/credorDivida");
+  GetGenericEndpoint(): Observable<any> {
+    return this.httpClient.get("/api/generic/data");
   }
 
   // Retorna tipo específico quando schema está definido
-  GetLaboratorioWithParams(Nome?: any, AlteracaoCadastro?: any, Pagina?: any, TamanhoDaPagina?: any, Ordenacao?: any, TipoOrdenacao?: any): Observable<LaboratorioDtoResultPaginateFilterDto> {
-    return this.httpClient.get("/api/Laboratorio/ListarTodos", { params: { Nome, AlteracaoCadastro, Pagina, TamanhoDaPagina, Ordenacao, TipoOrdenacao } });
+  GetProductWithParams(Name?: any, Page?: any, PageSize?: any, SortBy?: any, SortDirection?: any): Observable<ProductPaginatedResultDto> {
+    return this.httpClient.get("/api/Product/ListAll", { params: { Name, Page, PageSize, SortBy, SortDirection } });
   }
 
   // Retorna objeto único
-  GetLaboratorioById(id: any): Observable<LaboratorioDto> {
-    return this.httpClient.get(\`/api/Laboratorio/\${id}\`);
+  GetProductById(id: any): Observable<ProductDto> {
+    return this.httpClient.get(\`/api/Product/\${id}\`);
   }
 
   // Operações CREATE/UPDATE/DELETE
-  PostLaboratorioCreate(body: any): Observable<LaboratorioDto> {
-    return this.httpClient.post("/api/Laboratorio/Incluir", body);
+  PostProductCreate(body: any): Observable<ProductDto> {
+    return this.httpClient.post("/api/Product/Create", body);
   }
 
-  PutLaboratorioCreate(body: any): Observable<any> {
-    return this.httpClient.put("/api/Laboratorio/Alterar", body);
+  PutProductUpdate(body: any): Observable<any> {
+    return this.httpClient.put("/api/Product/Update", body);
   }
 
-  DeleteLaboratorio(id?: any): Observable<any> {
-    return this.httpClient.delete("/api/Laboratorio/Excluir", { params: { id } });
+  DeleteProduct(id?: any): Observable<any> {
+    return this.httpClient.delete("/api/Product/Delete", { params: { id } });
   }
 
   // ... mais métodos
@@ -358,8 +415,8 @@ Também gera `outputs/http-client/missing-swagger-definitions.json`.
 // Exemplo de uso
 import { SauronApiClient } from "./outputs/http-client/sauron-api.client";
 import type {
-  LaboratorioDto,
-  LaboratorioDtoResultPaginateFilterDto,
+  ProductDto,
+  ProductPaginatedResultDto,
 } from "./outputs/models";
 
 // Criar instância com base URL
@@ -367,12 +424,12 @@ const api = new SauronApiClient("https://api.exemplo.com");
 
 // Usar métodos assíncronos com tipos específicos
 try {
-  const laboratorios: LaboratorioDtoResultPaginateFilterDto =
-    await api.GetLaboratorioWithParams("search", 1, 10);
-  console.log("Resultados:", laboratorios);
+  const products: ProductPaginatedResultDto =
+    await api.GetProductWithParams("search", 1, 10);
+  console.log("Resultados:", products);
 
-  const laboratorio: LaboratorioDto = await api.GetLaboratorioById(123);
-  console.log("Laboratório específico:", laboratorio);
+  const product: ProductDto = await api.GetProductById(123);
+  console.log("Produto específico:", product);
 } catch (error) {
   console.error("Erro na API:", error);
 }
@@ -386,7 +443,7 @@ import { sauronApi } from "./outputs/http-client/sauron-api.client";
 // Configura uma única vez para todas as chamadas
 sauronApi.setBaseUrl("https://api.exemplo.com");
 
-const result = await sauronApi.GetLaboratorioWithParams("search", 1, 10);
+const result = await sauronApi.GetProductWithParams("search", 1, 10);
 ```
 
 ### Cliente Axios
@@ -402,7 +459,7 @@ Também gera `outputs/http-client/missing-swagger-definitions.axios.json`.
 import { SauronAxiosApiClient } from "./outputs/http-client/sauron-api.axios-client";
 
 const api = new SauronAxiosApiClient("https://api.exemplo.com");
-const result = await api.GetLaboratorioWithParams("search", 1, 10);
+const result = await api.GetProductWithParams("search", 1, 10);
 console.log(result);
 ```
 
@@ -444,7 +501,7 @@ import { SauronApiService } from './src/app/sauron/angular-http-client/sauron-ap
 constructor(private api: SauronApiService) {}
 
 loadData() {
-  this.api.GetLaboratorioWithParams('search', 1, 10)
+  this.api.GetProductWithParams('search', 1, 10)
     .subscribe(result => console.log(result));
 }
 ```
@@ -454,46 +511,45 @@ loadData() {
 ```typescript
 import { Component, inject } from '@angular/core';
 import { SauronApiService } from './outputs/angular-http-client/sauron-api.service';
-import { LaboratorioDtoResultPaginateFilterDto } from './outputs/models';
+import { ProductPaginatedResultDto } from './outputs/models';
 
 @Component({...})
 export class MyComponent {
   private readonly api = inject(SauronApiService);
 
   // Com tipos específicos - IntelliSense e type safety
-  loadLaboratorios() {
-    this.api.GetLaboratorioWithParams(
+  loadProducts() {
+    this.api.GetProductWithParams(
       'search term',
-      undefined, // AlteracaoCadastro
-      1,         // Pagina
-      10,        // TamanhoDaPagina
-      'Nome',    // Ordenacao
-      'asc'      // TipoOrdenacao
-    ).subscribe((response: LaboratorioDtoResultPaginateFilterDto) => {
-      // response.dados é tipado como LaboratorioDto[]
-      // response.totalRegistros é tipado como number
-      console.log('Total:', response.totalRegistros);
-      console.log('Dados:', response.dados);
+      1,         // Page
+      10,        // PageSize
+      'Name',    // SortBy
+      'asc'      // SortDirection
+    ).subscribe((response: ProductPaginatedResultDto) => {
+      // response.items é tipado como ProductDto[]
+      // response.totalCount é tipado como number
+      console.log('Total:', response.totalCount);
+      console.log('Items:', response.items);
     });
   }
 
-  // Buscar laboratório específico
-  getLaboratorio(id: number) {
-    this.api.GetLaboratorioById(id).subscribe(lab => {
-      console.log('Laboratório:', lab);
+  // Buscar produto específico
+  getProduct(id: number) {
+    this.api.GetProductById(id).subscribe(product => {
+      console.log('Produto:', product);
     });
   }
 
-  // Criar novo laboratório
-  createLaboratorio(labData: any) {
-    this.api.PostLaboratorioCreate(labData).subscribe(result => {
+  // Criar novo produto
+  createProduct(productData: any) {
+    this.api.PostProductCreate(productData).subscribe(result => {
       console.log('Criado:', result);
     });
   }
 
   // Sem tipos específicos - ainda funciona
   loadGenericData() {
-    this.api.GetApiGenerica().subscribe((data: any) => {
+    this.api.GetGenericEndpoint().subscribe((data: any) => {
       console.log(data);
     });
   }

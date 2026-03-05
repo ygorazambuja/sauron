@@ -28,7 +28,7 @@ Todo plugin deve implementar `SauronPlugin` (em `src/plugins/types.ts`):
 
 - schema OpenAPI validado (`schema`)
 - tipos derivados por operacao (`operationTypes`, `typeNameMap`)
-- opcoes resolvidas (`options`)
+- opcoes resolvidas (`options`, incluindo `shortNames`)
 - caminhos de saida (`baseOutputPath`, `modelsPath`)
 - cabecalho padrao (`fileHeader`)
 - status de projeto Angular (`isAngularProject`)
