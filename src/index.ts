@@ -1,4 +1,5 @@
 import { main } from "./cli/main";
+import { isMainModule } from "./runtime";
 
 export {
 	parseArgs,
@@ -42,6 +43,6 @@ export type { PluginContext, SauronPlugin } from "./plugins/types";
 
 export { main };
 
-if (import.meta.main) {
+if (isMainModule(import.meta.url)) {
 	main();
 }

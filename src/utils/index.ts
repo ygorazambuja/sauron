@@ -28,6 +28,7 @@
  * @since 1.0.0
  */
 
+import { readFile } from "node:fs/promises";
 import type { z } from "zod";
 import { SwaggerOrOpenAPISchema } from "../schemas/swagger";
 
@@ -105,8 +106,7 @@ export async function readJsonFile(filePath: string): Promise<unknown> {
 	}
 
 	try {
-		const file = Bun.file(filePath);
-		const content = await file.text();
+		const content = await readFile(filePath, "utf-8");
 		return JSON.parse(content);
 	} catch (error) {
 		throw new Error(

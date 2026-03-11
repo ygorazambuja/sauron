@@ -5,18 +5,19 @@
 - `src/utils/` holds conversion utilities (model/service generation helpers).
 - `src/schemas/` contains Zod schemas used to validate OpenAPI input.
 - `src/index.test.ts` is the primary test suite (Bun test runner).
-- `bin.ts` is the executable wrapper for CLI usage.
+- `bin.js` is the published Node executable wrapper for CLI usage.
 - `examples/` includes sample usage snippets for generated clients/services.
 - Generated outputs default to `outputs/models/` and `outputs/http-client/` (or `src/app/sauron/` inside Angular projects).
 
 ## Build, Test, and Development Commands
 - `bun install`: install dependencies.
 - `bun run src/index.ts`: run the CLI directly (dev flow).
-- `bun run cli -- --input swagger.json --angular --http`: run via the bin wrapper with flags.
+- `bun run cli -- --input swagger.json --angular --http`: run the CLI entry point with flags during development.
 - `bun test`: run the full test suite.
 - `bun test --watch`: run tests in watch mode.
 - `bun test --coverage`: produce a coverage report.
-- `bun build --compile ./src/index.ts --outfile sauron`: compile a standalone binary.
+- `bun run build`: build the Node runtime bundle published to npm.
+- `bun run build:binary`: compile a standalone binary.
 
 ## Coding Style & Naming Conventions
 - Formatting and linting are handled by Biome (`biome.json`).

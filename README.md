@@ -20,13 +20,24 @@ Este projeto converte automaticamente schemas OpenAPI/Swagger JSON em definiçõ
 
 ## Como Usar
 
+### Runtime com Node
+
+O pacote publicado roda em Node.js 20+ e nao exige Bun no ambiente consumidor.
+
+```bash
+npx @ygorazambuja/sauron --input swagger.json --angular --http
+
+npm install -g @ygorazambuja/sauron
+sauron --input swagger.json --angular --http
+```
+
 ### Opção 1: Binário Compilado (Recomendado)
 
 Após compilar o projeto, você pode usar o binário executável diretamente:
 
 ```bash
 # Compilar o projeto
-bun build --compile ./src/index.ts --outfile sauron
+bun run build:binary
 
 # Usar o binário
 ./sauron --input swagger.json --angular --http
@@ -45,7 +56,7 @@ bun run cli -- init
 bun run src/index.ts
 
 # Ou usar o CLI wrapper
-bun run cli --input swagger.json --angular
+bun run cli -- --input swagger.json --angular
 ```
 
 ### Executar Testes
@@ -317,7 +328,7 @@ const models = createModels(schema, { shortNames: false });
 ### Executar Testes
 
 ```bash
-bun run src/index.ts
+bun test
 ```
 
 ### Modificar Schemas
@@ -632,7 +643,7 @@ O projeto pode ser compilado em um único arquivo executável que roda em qualqu
 
 ```bash
 # Compilar
-bun build --compile ./src/index.ts --outfile sauron
+bun run build:binary
 
 # O arquivo 'sauron' pode ser distribuído e executado diretamente
 ./sauron --input api.json --angular
@@ -640,11 +651,11 @@ bun build --compile ./src/index.ts --outfile sauron
 
 ### Publicação no NPM com Bun
 
-Para validar e publicar no registro npm usando Bun:
+Para validar e publicar no registro npm:
 
 ```bash
-bun publish --dry-run
-bun publish --access public
+npm pack --dry-run
+npm publish --access public
 ```
 
 Então outros projetos podem instalar e usar:

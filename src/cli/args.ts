@@ -1,4 +1,5 @@
 import { parseArgs as parseCliArgs } from "node:util";
+import { getRuntimeArgv } from "../runtime";
 import type { CliOptions } from "./types";
 
 /**
@@ -12,7 +13,7 @@ import type { CliOptions } from "./types";
  */
 export function parseCommand(): "generate" | "init" {
 	const { positionals } = parseCliArgs({
-		args: Bun.argv,
+		args: getRuntimeArgv(),
 		options: {},
 		strict: false,
 		allowPositionals: true,
@@ -33,7 +34,7 @@ export function parseCommand(): "generate" | "init" {
  */
 export function parseArgs(): CliOptions {
 	const { values, positionals } = parseCliArgs({
-		args: Bun.argv,
+		args: getRuntimeArgv(),
 		options: {
 			input: {
 				type: "string",

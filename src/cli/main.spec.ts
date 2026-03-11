@@ -29,7 +29,7 @@ describe("CLI main", () => {
 	beforeEach(() => {
 		tempDir = mkdtempSync(join(tmpdir(), "sauron-cli-main-test-"));
 		originalCwd = process.cwd();
-		originalArgv = Bun.argv;
+		originalArgv = process.argv;
 		process.chdir(tempDir);
 		logSpy = spyOn(console, "log").mockImplementation(mock(() => {}));
 		errorSpy = spyOn(console, "error").mockImplementation(mock(() => {}));
@@ -41,18 +41,18 @@ describe("CLI main", () => {
 		errorSpy.mockRestore();
 		warnSpy.mockRestore();
 		process.chdir(originalCwd);
-		Bun.argv = originalArgv;
+		process.argv = originalArgv;
 		rmSync(tempDir, { recursive: true, force: true });
 	});
 
 	test("should run init command through main", async () => {
-		Bun.argv = ["bun", "index.js", "init"];
+		process.argv = ["node", "index.js", "init"];
 		await main();
 		expect(existsSync("sauron.config.ts")).toBe(true);
 	});
 
 	test("should show help through main when help flag is provided", async () => {
-		Bun.argv = ["bun", "index.js", "--help"];
+		process.argv = ["node", "index.js", "--help"];
 		await main();
 		expect(logSpy).toHaveBeenCalled();
 		expect(existsSync(join("outputs", "models", "index.ts"))).toBe(false);
@@ -87,7 +87,7 @@ describe("CLI main", () => {
 		};
 
 		writeFileSync("swagger.json", JSON.stringify(openApiSchema));
-		Bun.argv = ["bun", "index.js", "--http", "--input", "swagger.json"];
+		process.argv = ["node", "index.js", "--http", "--input", "swagger.json"];
 
 		await main();
 
@@ -129,8 +129,8 @@ describe("CLI main", () => {
 		};
 
 		writeFileSync("swagger.json", JSON.stringify(openApiSchema));
-		Bun.argv = [
-			"bun",
+		process.argv = [
+			"node",
 			"index.js",
 			"--plugin",
 			"fetch",
@@ -178,8 +178,8 @@ describe("CLI main", () => {
 		};
 
 		writeFileSync("swagger.json", JSON.stringify(openApiSchema));
-		Bun.argv = [
-			"bun",
+		process.argv = [
+			"node",
 			"index.js",
 			"--plugin",
 			"axios",
@@ -237,7 +237,7 @@ describe("CLI main", () => {
 				},
 			}),
 		);
-		Bun.argv = ["bun", "index.js", "--plugin", "mcp", "--input", "swagger.json"];
+		process.argv = ["node", "index.js", "--plugin", "mcp", "--input", "swagger.json"];
 
 		await main();
 
@@ -270,8 +270,8 @@ describe("CLI main", () => {
 				},
 			}),
 		);
-		Bun.argv = [
-			"bun",
+		process.argv = [
+			"node",
 			"index.js",
 			"--plugin",
 			"mcp",
@@ -311,8 +311,8 @@ describe("CLI main", () => {
 				},
 			}),
 		);
-		Bun.argv = [
-			"bun",
+		process.argv = [
+			"node",
 			"index.js",
 			"--plugin",
 			"fetch",
@@ -376,7 +376,7 @@ describe("CLI main", () => {
 		globalThis.fetch = mock(
 			async () => new Response(JSON.stringify(openApiSchema), { status: 200 }),
 		) as typeof fetch;
-		Bun.argv = ["bun", "index.js", "--config", "sauron.config.ts"];
+		process.argv = ["node", "index.js", "--config", "sauron.config.ts"];
 
 		try {
 			await main();
@@ -434,8 +434,8 @@ describe("CLI main", () => {
 			}),
 		);
 
-		Bun.argv = [
-			"bun",
+		process.argv = [
+			"node",
 			"index.js",
 			"--http",
 			"--angular",
@@ -513,8 +513,8 @@ describe("CLI main", () => {
 			}),
 		);
 
-		Bun.argv = [
-			"bun",
+		process.argv = [
+			"node",
 			"index.js",
 			"--http",
 			"--angular",
@@ -568,7 +568,7 @@ describe("CLI main", () => {
 			}),
 		);
 
-		Bun.argv = ["bun", "index.js", "--plugin", "angular", "--input", "swagger.json"];
+		process.argv = ["node", "index.js", "--plugin", "angular", "--input", "swagger.json"];
 		await main();
 
 		expect(existsSync(join("src", "app", "sauron", "models", "index.ts"))).toBe(
@@ -607,7 +607,7 @@ describe("CLI main", () => {
 			}),
 		);
 
-		Bun.argv = ["bun", "index.js", "--plugin", "angular", "--input", "swagger.json"];
+		process.argv = ["node", "index.js", "--plugin", "angular", "--input", "swagger.json"];
 		await main();
 
 		expect(
@@ -624,7 +624,7 @@ describe("CLI main", () => {
 			throw new Error("process_exit_called");
 		}) as (code?: number) => never);
 		writeFileSync("swagger.json", '"invalid"');
-		Bun.argv = ["bun", "index.js", "--input", "swagger.json"];
+		process.argv = ["node", "index.js", "--input", "swagger.json"];
 
 		try {
 			await expect(main()).rejects.toThrow("process_exit_called");
