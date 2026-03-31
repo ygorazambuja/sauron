@@ -242,12 +242,8 @@ describe("OpenAPI to TypeScript Converter Utilities", () => {
 			};
 
 			const result = createModels(openApiSchema);
-			const dtoInterface = result.find((r) =>
-				r.includes("interface Dto"),
-			);
-			const childInterface = result.find((r) =>
-				r.includes("interface Child"),
-			);
+			const dtoInterface = result.find((r) => r.includes("interface Dto"));
+			const childInterface = result.find((r) => r.includes("interface Child"));
 
 			expect(dtoInterface).toContain("child: Child;");
 			expect(childInterface).toContain("id: number;");
@@ -398,7 +394,8 @@ describe("OpenAPI to TypeScript Converter Utilities", () => {
 			};
 
 			const result = createModels(openApiSchema);
-			const annotationMatches = result[0].match(/\/\/ openapi Date -> String/g) || [];
+			const annotationMatches =
+				result[0].match(/\/\/ openapi Date -> String/g) || [];
 
 			expect(annotationMatches).toHaveLength(2);
 			expect(result[0]).toContain("id: number;");

@@ -13,7 +13,11 @@ import type {
 export type MissingSwaggerDefinitionIssue = {
 	path: string;
 	method: string;
-	location: "path.parameter" | "query.parameter" | "request.body" | "response.body";
+	location:
+		| "path.parameter"
+		| "query.parameter"
+		| "request.body"
+		| "response.body";
 	field?: string;
 	reason: string;
 	recommendedDefinition: string;
@@ -149,12 +153,22 @@ function collectOperationIssues(
 	const parameterIssues = collectParameterIssues(path, httpMethod, operation);
 	issues.push(...parameterIssues);
 
-	const requestIssue = collectRequestBodyIssue(path, httpMethod, operation, typeInfo);
+	const requestIssue = collectRequestBodyIssue(
+		path,
+		httpMethod,
+		operation,
+		typeInfo,
+	);
 	if (requestIssue) {
 		issues.push(requestIssue);
 	}
 
-	const responseIssue = collectResponseBodyIssue(path, httpMethod, operation, typeInfo);
+	const responseIssue = collectResponseBodyIssue(
+		path,
+		httpMethod,
+		operation,
+		typeInfo,
+	);
 	if (responseIssue) {
 		issues.push(responseIssue);
 	}
@@ -264,7 +278,8 @@ function collectRequestBodyIssue(
 		return undefined;
 	}
 
-	const requestType = typeInfo?.requestType ?? extractRequestType(operation) ?? "any";
+	const requestType =
+		typeInfo?.requestType ?? extractRequestType(operation) ?? "any";
 	if (!containsAnyType(requestType)) {
 		return undefined;
 	}
@@ -285,7 +300,8 @@ function collectRequestBodyIssue(
 		path,
 		method: httpMethod.toUpperCase(),
 		location: "request.body",
-		reason: "Request body schema could not be resolved to a concrete model type.",
+		reason:
+			"Request body schema could not be resolved to a concrete model type.",
 		recommendedDefinition:
 			"Reference a schema with $ref or define a complete inline schema in requestBody.content.",
 	};
@@ -310,14 +326,26 @@ function collectResponseBodyIssue(
 	operation: OpenApiOperation,
 	typeInfo?: OperationTypeInfo,
 ): MissingSwaggerDefinitionIssue | undefined {
-	const requestType = typeInfo?.requestType ?? extractRequestType(operation) ?? "any";
+	const hasNoContentStatus = Object.keys(operation.responses ?? {}).some(
+		(status) => status === "204" || status === "205",
+	);
+	if (httpMethod === "delete" || hasNoContentStatus) {
+		return undefined;
+	}
+
+	const requestType =
+		typeInfo?.requestType ?? extractRequestType(operation) ?? "any";
 	let responseType = typeInfo?.responseType ?? extractResponseType(operation);
 	if (!responseType) {
 		responseType = "any";
 	}
 
 	const isMutatingMethod = ["post", "put", "patch"].includes(httpMethod);
-	if (containsAnyType(responseType) && isMutatingMethod && !containsAnyType(requestType)) {
+	if (
+		containsAnyType(responseType) &&
+		isMutatingMethod &&
+		!containsAnyType(requestType)
+	) {
 		responseType = requestType;
 	}
 
@@ -343,7 +371,8 @@ function collectResponseBodyIssue(
 			path,
 			method: httpMethod.toUpperCase(),
 			location: "response.body",
-			reason: "Success response exists but no response schema was documented in content.",
+			reason:
+				"Success response exists but no response schema was documented in content.",
 			recommendedDefinition:
 				"Add response.content['application/json'].schema using $ref or a fully defined inline schema.",
 		};
@@ -467,7 +496,9 @@ function getPreferredContentSchema(
  */
 function getSuccessResponse(
 	operation: OpenApiOperation,
-): { content?: Record<string, { schema: Record<string, unknown> }> } | undefined {
+):
+	| { content?: Record<string, { schema: Record<string, unknown> }> }
+	| undefined {
 	const responses = operation.responses ?? {};
 
 	const response200 = responses["200"];
@@ -507,7 +538,12 @@ function getSuccessResponse(
  * ```
  */
 function extractRequestType(operation: OpenApiOperation): string | undefined {
-	const schema = getPreferredContentSchema(operation.requestBody?.content as never);
+	const schema = getPreferredContentSchema(
+		operation.requestBody?.content as Record<
+			string,
+			{ schema: Record<string, unknown> }
+		>,
+	);
 	if (!schema) {
 		return undefined;
 	}
@@ -527,7 +563,7 @@ function extractRequestType(operation: OpenApiOperation): string | undefined {
 		return undefined;
 	}
 
-	const itemRef = getSchemaRef(items);
+	const itemRef = getSchemaRef(items as Record<string, unknown>);
 	if (!itemRef) {
 		return undefined;
 	}
@@ -571,7 +607,7 @@ function extractResponseType(operation: OpenApiOperation): string {
 		return "any";
 	}
 
-	const itemRef = getSchemaRef(items);
+	const itemRef = getSchemaRef(items as Record<string, unknown>);
 	if (!itemRef) {
 		return "any[]";
 	}
@@ -644,7 +680,7 @@ function resolveSchemaType(schema: unknown): string {
 	if (Array.isArray(schemaEnum)) {
 		const union = schemaEnum
 			.map((enumValue) =>
-				typeof enumValue === "string" ? `\"${enumValue}\"` : String(enumValue),
+				typeof enumValue === "string" ? `"${enumValue}"` : String(enumValue),
 			)
 			.join(" | ");
 		if (!union) {

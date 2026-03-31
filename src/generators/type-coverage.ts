@@ -211,12 +211,22 @@ function collectOperationEntries(
 	const parameterEntries = collectParameterEntries(path, httpMethod, operation);
 	entries.push(...parameterEntries);
 
-	const requestEntry = collectRequestBodyEntry(path, httpMethod, operation, typeInfo);
+	const requestEntry = collectRequestBodyEntry(
+		path,
+		httpMethod,
+		operation,
+		typeInfo,
+	);
 	if (requestEntry) {
 		entries.push(requestEntry);
 	}
 
-	const responseEntry = collectResponseBodyEntry(path, httpMethod, operation, typeInfo);
+	const responseEntry = collectResponseBodyEntry(
+		path,
+		httpMethod,
+		operation,
+		typeInfo,
+	);
 	entries.push(responseEntry);
 
 	return entries;
@@ -320,7 +330,8 @@ function collectRequestBodyEntry(
 		return undefined;
 	}
 
-	const requestType = typeInfo?.requestType ?? extractRequestType(operation) ?? "any";
+	const requestType =
+		typeInfo?.requestType ?? extractRequestType(operation) ?? "any";
 	const isTyped = !containsAnyType(requestType);
 	const schema = getPreferredContentSchema(operation.requestBody.content);
 
@@ -376,19 +387,37 @@ function collectResponseBodyEntry(
 	operation: OpenApiOperation,
 	typeInfo?: OperationTypeInfo,
 ): CoverageEntry {
-	const requestType = typeInfo?.requestType ?? extractRequestType(operation) ?? "any";
+	const successResponse = getSuccessResponse(operation);
+	const hasNoContentStatus = Object.keys(operation.responses ?? {}).some(
+		(status) => status === "204" || status === "205",
+	);
+	if (httpMethod === "delete" || hasNoContentStatus) {
+		return {
+			path,
+			method: httpMethod.toUpperCase(),
+			location: "response.body",
+			isTyped: true,
+			reason: undefined,
+		};
+	}
+
+	const requestType =
+		typeInfo?.requestType ?? extractRequestType(operation) ?? "any";
 	let responseType = typeInfo?.responseType ?? extractResponseType(operation);
 	if (!responseType) {
 		responseType = "any";
 	}
 
 	const isMutatingMethod = ["post", "put", "patch"].includes(httpMethod);
-	if (containsAnyType(responseType) && isMutatingMethod && !containsAnyType(requestType)) {
+	if (
+		containsAnyType(responseType) &&
+		isMutatingMethod &&
+		!containsAnyType(requestType)
+	) {
 		responseType = requestType;
 	}
 
 	const isTyped = !containsAnyType(responseType);
-	const successResponse = getSuccessResponse(operation);
 	const schema = getPreferredContentSchema(successResponse?.content);
 
 	return {
@@ -441,7 +470,9 @@ function resolveResponseBodyReason(
  * // result: TypeCoverageIssue[]
  * ```
  */
-function buildTypeCoverageIssues(entries: CoverageEntry[]): TypeCoverageIssue[] {
+function buildTypeCoverageIssues(
+	entries: CoverageEntry[],
+): TypeCoverageIssue[] {
 	return entries
 		.filter((entry) => !entry.isTyped)
 		.map((entry) => ({
@@ -629,7 +660,9 @@ function getPreferredContentSchema(
  */
 function getSuccessResponse(
 	operation: OpenApiOperation,
-): { content?: Record<string, { schema: Record<string, unknown> }> } | undefined {
+):
+	| { content?: Record<string, { schema: Record<string, unknown> }> }
+	| undefined {
 	const responses = operation.responses ?? {};
 
 	const response200 = responses["200"];
@@ -669,7 +702,12 @@ function getSuccessResponse(
  * ```
  */
 function extractRequestType(operation: OpenApiOperation): string | undefined {
-	const schema = getPreferredContentSchema(operation.requestBody?.content as never);
+	const schema = getPreferredContentSchema(
+		operation.requestBody?.content as Record<
+			string,
+			{ schema: Record<string, unknown> }
+		>,
+	);
 	if (!schema) {
 		return undefined;
 	}
@@ -689,7 +727,7 @@ function extractRequestType(operation: OpenApiOperation): string | undefined {
 		return undefined;
 	}
 
-	const itemRef = getSchemaRef(items);
+	const itemRef = getSchemaRef(items as Record<string, unknown>);
 	if (!itemRef) {
 		return undefined;
 	}
@@ -733,7 +771,7 @@ function extractResponseType(operation: OpenApiOperation): string {
 		return "any";
 	}
 
-	const itemRef = getSchemaRef(items);
+	const itemRef = getSchemaRef(items as Record<string, unknown>);
 	if (!itemRef) {
 		return "any[]";
 	}
@@ -806,7 +844,7 @@ function resolveSchemaType(schema: unknown): string {
 	if (Array.isArray(schemaEnum)) {
 		const union = schemaEnum
 			.map((enumValue) =>
-				typeof enumValue === "string" ? `\"${enumValue}\"` : String(enumValue),
+				typeof enumValue === "string" ? `"${enumValue}"` : String(enumValue),
 			)
 			.join(" | ");
 		if (!union) {

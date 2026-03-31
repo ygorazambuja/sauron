@@ -95,10 +95,26 @@ function resolveOutputs(context: PluginContext): PluginOutputPaths {
 	return {
 		artifacts: [
 			{ kind: "service", path: servicePath, label: "MCP server entrypoint" },
-			{ kind: "service", path: join(outputDirectory, "server.ts"), label: "MCP server factory" },
-			{ kind: "service", path: join(outputDirectory, "client", "api.client.ts"), label: "Generated API client" },
-			{ kind: "manifest", path: reportPath, label: "MCP tools inventory report" },
-			{ kind: "other", path: join(outputDirectory, "README.md"), label: "Generated MCP README" },
+			{
+				kind: "service",
+				path: join(outputDirectory, "server.ts"),
+				label: "MCP server factory",
+			},
+			{
+				kind: "service",
+				path: join(outputDirectory, "client", "api.client.ts"),
+				label: "Generated API client",
+			},
+			{
+				kind: "manifest",
+				path: reportPath,
+				label: "MCP tools inventory report",
+			},
+			{
+				kind: "other",
+				path: join(outputDirectory, "README.md"),
+				label: "Generated MCP README",
+			},
 		],
 		servicePath,
 		reportPath,
@@ -115,9 +131,7 @@ function resolveOutputs(context: PluginContext): PluginOutputPaths {
  * // result: PluginGenerateResult
  * ```
  */
-async function generate(
-	context: PluginContext,
-): Promise<PluginGenerateResult> {
+async function generate(context: PluginContext): Promise<PluginGenerateResult> {
 	const outputPaths = resolveOutputs(context);
 	const outputDirectory = join(context.baseOutputPath, "mcp");
 	const { groups, actionCount } = collectResourceGroups(
@@ -156,7 +170,11 @@ async function generate(
 			content: `${context.fileHeader}\n${buildTypesSource(group)}`,
 		});
 		files.push({
-			path: join(outputDirectory, "schemas", `${group.schemaFileName}.schema.ts`),
+			path: join(
+				outputDirectory,
+				"schemas",
+				`${group.schemaFileName}.schema.ts`,
+			),
 			content: `${context.fileHeader}\n${buildSchemaSource(group)}`,
 		});
 	}
@@ -177,7 +195,9 @@ async function generate(
  * // result: ResourceCollection
  * ```
  */
-function collectResourceGroups(schema: Record<string, unknown>): ResourceCollection {
+function collectResourceGroups(
+	schema: Record<string, unknown>,
+): ResourceCollection {
 	const paths = schema.paths;
 	if (!paths || typeof paths !== "object") {
 		return { groups: [], actionCount: 0 };
@@ -238,7 +258,8 @@ function collectOperationsForPath(
 		return [];
 	}
 
-	const operations: Array<{ resourceName: string; action: ResourceAction }> = [];
+	const operations: Array<{ resourceName: string; action: ResourceAction }> =
+		[];
 	const methodEntries: HttpMethod[] = [
 		"get",
 		"post",
@@ -262,8 +283,10 @@ function collectOperationsForPath(
 				actionName: resolveActionName(method, path, operation),
 				httpMethod: method,
 				path,
-				summary: getText(operation.summary),
-				description: getText((operation as Record<string, unknown>).description),
+				summary: getText((operation as Record<string, unknown>).summary),
+				description: getText(
+					(operation as Record<string, unknown>).description,
+				),
 				operationId: getText(operation.operationId),
 				hasBody: hasJsonBody(operation),
 				hasPathId: pathParams.includes("id"),
@@ -286,7 +309,10 @@ function collectOperationsForPath(
  * // result: string
  * ```
  */
-function resolveResourceName(operation: OpenApiOperation, path: string): string {
+function resolveResourceName(
+	operation: OpenApiOperation,
+	path: string,
+): string {
 	const tags = Array.isArray(operation.tags)
 		? operation.tags.filter((tag): tag is string => typeof tag === "string")
 		: [];
@@ -416,7 +442,10 @@ await server.connect(transport);
  * // result: string
  * ```
  */
-function buildServerSource(groups: ResourceGroup[], context: PluginContext): string {
+function buildServerSource(
+	groups: ResourceGroup[],
+	context: PluginContext,
+): string {
 	const importLines = groups.map(
 		(group) =>
 			`import { ${group.registerFunctionName} } from "./tools/${group.toolFileName}.tool";`,
@@ -590,7 +619,9 @@ export class ApiClient {
  * ```
  */
 function buildToolSource(group: ResourceGroup): string {
-	const enumValues = group.actions.map((action) => JSON.stringify(action.actionName));
+	const enumValues = group.actions.map((action) =>
+		JSON.stringify(action.actionName),
+	);
 	const actionDescriptions = group.actions.map((action) => {
 		const info = [action.summary, action.description]
 			.filter((value) => !!value)
@@ -724,8 +755,15 @@ function buildActionCase(action: ResourceAction): string {
 	const methodCall = resolveClientMethod(action.httpMethod);
 	const pathResolution = `const resolvedPath = resolvePath(${JSON.stringify(action.path)}, { id, params });`;
 	const pathValidation = `if (!resolvedPath.ok) { return createErrorResult(resolvedPath.message); }`;
-	const queryArg = action.httpMethod === "get" || action.httpMethod === "delete" ? "query" : "undefined";
-	if (action.httpMethod === "post" || action.httpMethod === "put" || action.httpMethod === "patch") {
+	const queryArg =
+		action.httpMethod === "get" || action.httpMethod === "delete"
+			? "query"
+			: "undefined";
+	if (
+		action.httpMethod === "post" ||
+		action.httpMethod === "put" ||
+		action.httpMethod === "patch"
+	) {
 		return `\t\t\t\t\tcase ${JSON.stringify(action.actionName)}: {\n\t\t\t\t\t\t${pathResolution}\n\t\t\t\t\t\t${pathValidation}\n\t\t\t\t\t\tconst result = await client.${methodCall}(resolvedPath.path, data);\n\t\t\t\t\t\treturn createSuccessResult(result);\n\t\t\t\t\t}`;
 	}
 
@@ -772,7 +810,9 @@ function resolveClientMethod(
  */
 function buildTypesSource(group: ResourceGroup): string {
 	const toolTypeName = `${toPascalCase(group.resourceName)}ToolInput`;
-	const actionLiterals = group.actions.map((action) => JSON.stringify(action.actionName));
+	const actionLiterals = group.actions.map((action) =>
+		JSON.stringify(action.actionName),
+	);
 	const actionInterfaces = group.actions
 		.map((action) => {
 			const interfaceName = `${toPascalCase(action.actionName)}${toPascalCase(group.resourceName)}Input`;

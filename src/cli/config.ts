@@ -2,8 +2,8 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { rm, writeFile } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { getModuleDirname } from "../runtime";
 import type { z } from "zod";
+import { getModuleDirname } from "../runtime";
 import type { SwaggerOrOpenAPISchema } from "../schemas/swagger";
 import { isAngularProject } from "./project";
 import {
@@ -82,9 +82,7 @@ function getSauronVersion(): string {
  * // result: string | null
  * ```
  */
-function findNearestPackageJsonPath(
-	startDirectory: string,
-): string | null {
+function findNearestPackageJsonPath(startDirectory: string): string | null {
 	let currentDirectory = startDirectory;
 
 	while (true) {
@@ -219,11 +217,14 @@ async function loadConfigModule(
 
 	const source = readFileSync(resolvedConfigPath, "utf-8");
 	const transpiledSource = transpileConfigSource(source);
-	const temporaryModulePath = createTemporaryConfigModulePath(resolvedConfigPath);
+	const temporaryModulePath =
+		createTemporaryConfigModulePath(resolvedConfigPath);
 	await writeFile(temporaryModulePath, transpiledSource, "utf-8");
 
 	try {
-		return await import(`${pathToFileURL(temporaryModulePath).href}?t=${Date.now()}`);
+		return await import(
+			`${pathToFileURL(temporaryModulePath).href}?t=${Date.now()}`
+		);
 	} finally {
 		await rm(temporaryModulePath, { force: true });
 	}
@@ -255,9 +256,7 @@ function transpileConfigSource(source: string): string {
  * // result: string
  * ```
  */
-function createTemporaryConfigModulePath(
-	resolvedConfigPath: string,
-): string {
+function createTemporaryConfigModulePath(resolvedConfigPath: string): string {
 	const configDirectory = dirname(resolvedConfigPath);
 	const configBaseName = basename(resolvedConfigPath, ".ts");
 	return resolve(

@@ -12,16 +12,16 @@
  * ```
  */
 export function generateAngularService(
-  methods: string[],
-  imports: string[],
-  _isAngularProject: boolean,
-  paramsInterfaces: string[] = [],
+	methods: string[],
+	imports: string[],
+	_isAngularProject: boolean,
+	paramsInterfaces: string[] = [],
 ): string {
-  const importStatement = buildModelImportStatement(imports);
-  const interfacesBlock = buildInterfacesBlock(paramsInterfaces);
-  const methodsBlock = methods.join("\n\n");
+	const importStatement = buildModelImportStatement(imports);
+	const interfacesBlock = buildInterfacesBlock(paramsInterfaces);
+	const methodsBlock = methods.join("\n\n");
 
-  const serviceTemplate = `import { Injectable, inject } from "@angular/core";
+	const serviceTemplate = `import { Injectable, inject } from "@angular/core";
 import { HttpClient } from "@angular/common/http";
 import { Observable } from "rxjs";
 
@@ -36,7 +36,7 @@ ${methodsBlock}
 }
 `;
 
-  return serviceTemplate;
+	return serviceTemplate;
 }
 
 /**
@@ -50,12 +50,12 @@ ${methodsBlock}
  * ```
  */
 function buildModelImportStatement(imports: string[]): string {
-  if (imports.length === 0) {
-    return "";
-  }
-  const importList = imports.join(", ");
-  const importPath = "../models";
-  return `import { ${importList} } from "${importPath}";\n`;
+	if (imports.length === 0) {
+		return "";
+	}
+	const importList = imports.join(", ");
+	const importPath = "../models";
+	return `import { ${importList} } from "${importPath}";\n`;
 }
 
 /**
@@ -69,8 +69,8 @@ function buildModelImportStatement(imports: string[]): string {
  * ```
  */
 function buildInterfacesBlock(paramsInterfaces: string[]): string {
-  if (paramsInterfaces.length === 0) {
-    return "";
-  }
-  return `${paramsInterfaces.join("\n\n")}\n\n`;
+	if (paramsInterfaces.length === 0) {
+		return "";
+	}
+	return `${paramsInterfaces.join("\n\n")}\n\n`;
 }

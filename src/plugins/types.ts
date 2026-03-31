@@ -76,10 +76,7 @@ export type PluginContext = {
 	operationTypes: OperationTypeMap;
 	typeNameMap: TypeNameMap;
 	isAngularProject: boolean;
-	writeFormattedFile: (
-		filePath: string,
-		content: string,
-	) => Promise<void>;
+	writeFormattedFile: (filePath: string, content: string) => Promise<void>;
 };
 
 /**

@@ -210,10 +210,7 @@ export function createModelsWithOperationTypes(
 		(data as any).components?.schemas || (data as any).definitions;
 	const schemaEntries = schemas ? Object.entries(schemas) : [];
 	const typeDefinitions: string[] = [];
-	const { typeNameMap, usedTypeNames } = createTypeNameMap(
-		schemas,
-		shortNames,
-	);
+	const { typeNameMap, usedTypeNames } = createTypeNameMap(schemas, shortNames);
 
 	if (!schemas) {
 		console.warn("Warning: No schema definitions found in OpenAPI components");
@@ -1151,15 +1148,13 @@ function extractResponseType(
 	typeNameMap?: TypeNameMap,
 ): string {
 	// Look for 200 response first, then any 2xx response
+	const successKey = Object.keys(operation.responses || {}).find(
+		(key) => key.startsWith("2") && operation.responses?.[key],
+	);
 	const response =
 		operation.responses?.["200"] ||
 		operation.responses?.["201"] ||
-		(Object.keys(operation.responses || {}).find(
-			(key) => key.startsWith("2") && operation.responses?.[key],
-		) &&
-			operation.responses?.[
-				Object.keys(operation.responses).find((key) => key.startsWith("2"))!
-			]);
+		(successKey ? operation.responses?.[successKey] : undefined);
 
 	if (!response || typeof response !== "object") {
 		return "any";
@@ -1616,7 +1611,9 @@ function generateTypeScriptDefinition(
 			) {
 				propertyDefinitions.push("  // openapi Date -> String");
 			}
-			propertyDefinitions.push(`  ${propertyName}${optionalMarker}: ${propertyType};`);
+			propertyDefinitions.push(
+				`  ${propertyName}${optionalMarker}: ${propertyType};`,
+			);
 		}
 
 		const propertiesString = propertyDefinitions.join("\n");

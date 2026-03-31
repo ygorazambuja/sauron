@@ -12,6 +12,7 @@ import { createAngularHttpClientMethods } from "../../utils";
 import type {
 	PluginCanRunResult,
 	PluginContext,
+	PluginFile,
 	PluginGenerateResult,
 	PluginOutputPaths,
 	SauronPlugin,
@@ -108,9 +109,7 @@ function resolveOutputs(context: PluginContext): PluginOutputPaths {
  * // result: PluginGenerateResult
  * ```
  */
-async function generate(
-	context: PluginContext,
-): Promise<PluginGenerateResult> {
+async function generate(context: PluginContext): Promise<PluginGenerateResult> {
 	const {
 		methods: angularMethods,
 		imports: angularImports,
@@ -141,13 +140,13 @@ async function generate(
 	);
 	const typeCoverageFileContent =
 		generateTypeCoverageReportFile(typeCoverageReport);
-	const files = [
+	const files: PluginFile[] = [
 		{
-			path: outputPaths.servicePath,
+			path: outputPaths.servicePath ?? "",
 			content: `${context.fileHeader}\n${angularService}`,
 		},
 		{
-			path: outputPaths.reportPath,
+			path: outputPaths.reportPath ?? "",
 			content: reportFileContent,
 		},
 	];

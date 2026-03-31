@@ -1,13 +1,13 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { runPlugins } from "../plugins/runner";
+import type { PluginExecutionResult } from "../plugins/types";
 import {
 	createModelsWithOperationTypes,
 	fetchJsonFromUrl,
 	readJsonFile,
 	verifySwaggerComposition,
 } from "../utils";
-import { runPlugins } from "../plugins/runner";
-import type { PluginExecutionResult } from "../plugins/types";
 import { parseArgs, parseCommand, showHelp } from "./args";
 import {
 	createGeneratedFileHeader,
@@ -17,7 +17,7 @@ import {
 	mergeOptionsWithConfig,
 } from "./config";
 import { isAngularProject, resolveOutputBasePath } from "./project";
-import { DEFAULT_CONFIG_FILE, type CliOptions } from "./types";
+import { type CliOptions, DEFAULT_CONFIG_FILE } from "./types";
 
 /**
  * Main.
@@ -112,7 +112,9 @@ export async function main() {
 		console.log("\n✅ Generation complete!");
 		console.log(`📄 Models: ${models.length} TypeScript interfaces/types`);
 		logPluginSummary(pluginResults);
-		console.log(`📁 Output: ${resolveOutputDisplayPath(options, angularDetected, preferAngularOutput)}`);
+		console.log(
+			`📁 Output: ${resolveOutputDisplayPath(options, angularDetected, preferAngularOutput)}`,
+		);
 	} catch (error) {
 		console.error("❌ Error:", error);
 		process.exit(1);
@@ -232,7 +234,9 @@ function logPluginReports(pluginResults: PluginExecutionResult[]): void {
 				continue;
 			}
 			if (artifact.kind === "manifest") {
-				console.log(`🧾 Manifest (${result.executedPluginId}): ${artifact.path}`);
+				console.log(
+					`🧾 Manifest (${result.executedPluginId}): ${artifact.path}`,
+				);
 			}
 		}
 	}

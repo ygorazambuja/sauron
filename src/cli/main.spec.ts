@@ -96,7 +96,9 @@ describe("CLI main", () => {
 			existsSync(join("outputs", "http-client", "sauron-api.client.ts")),
 		).toBe(true);
 		expect(
-			existsSync(join("outputs", "http-client", "missing-swagger-definitions.json")),
+			existsSync(
+				join("outputs", "http-client", "missing-swagger-definitions.json"),
+			),
 		).toBe(true);
 		expect(
 			existsSync(join("outputs", "http-client", "type-coverage-report.json")),
@@ -145,7 +147,9 @@ describe("CLI main", () => {
 			existsSync(join("outputs", "http-client", "sauron-api.client.ts")),
 		).toBe(true);
 		expect(
-			existsSync(join("outputs", "http-client", "missing-swagger-definitions.json")),
+			existsSync(
+				join("outputs", "http-client", "missing-swagger-definitions.json"),
+			),
 		).toBe(true);
 		expect(
 			existsSync(join("outputs", "http-client", "type-coverage-report.json")),
@@ -210,7 +214,7 @@ describe("CLI main", () => {
 		expect(existsSync(coverageReportPath)).toBe(true);
 
 		const axiosClientContent = readFileSync(axiosClientPath, "utf-8");
-		expect(axiosClientContent).toContain('import axios');
+		expect(axiosClientContent).toContain("import axios");
 		expect(axiosClientContent).toContain("fetchWithAxios");
 	});
 
@@ -237,7 +241,14 @@ describe("CLI main", () => {
 				},
 			}),
 		);
-		process.argv = ["node", "index.js", "--plugin", "mcp", "--input", "swagger.json"];
+		process.argv = [
+			"node",
+			"index.js",
+			"--plugin",
+			"mcp",
+			"--input",
+			"swagger.json",
+		];
 
 		await main();
 
@@ -283,9 +294,7 @@ describe("CLI main", () => {
 
 		await main();
 
-		expect(
-			existsSync(join("outputs", "mcp", "index.ts")),
-		).toBe(true);
+		expect(existsSync(join("outputs", "mcp", "index.ts"))).toBe(true);
 		expect(
 			existsSync(join("outputs", "http-client", "sauron-api.client.ts")),
 		).toBe(true);
@@ -389,7 +398,9 @@ describe("CLI main", () => {
 			existsSync(join("outputs", "http-client", "sauron-api.client.ts")),
 		).toBe(true);
 		expect(
-			existsSync(join("outputs", "http-client", "missing-swagger-definitions.json")),
+			existsSync(
+				join("outputs", "http-client", "missing-swagger-definitions.json"),
+			),
 		).toBe(true);
 		expect(
 			existsSync(join("outputs", "http-client", "type-coverage-report.json")),
@@ -527,13 +538,17 @@ describe("CLI main", () => {
 			existsSync(join("outputs", "http-client", "sauron-api.client.ts")),
 		).toBe(true);
 		expect(
-			existsSync(join("outputs", "http-client", "missing-swagger-definitions.json")),
+			existsSync(
+				join("outputs", "http-client", "missing-swagger-definitions.json"),
+			),
 		).toBe(true);
 		expect(
 			existsSync(join("outputs", "http-client", "type-coverage-report.json")),
 		).toBe(true);
 		expect(warnSpy).toHaveBeenCalledWith(
-			expect.stringContaining("--angular flag used but Angular project not detected"),
+			expect.stringContaining(
+				"--angular flag used but Angular project not detected",
+			),
 		);
 	});
 
@@ -568,7 +583,14 @@ describe("CLI main", () => {
 			}),
 		);
 
-		process.argv = ["node", "index.js", "--plugin", "angular", "--input", "swagger.json"];
+		process.argv = [
+			"node",
+			"index.js",
+			"--plugin",
+			"angular",
+			"--input",
+			"swagger.json",
+		];
 		await main();
 
 		expect(existsSync(join("src", "app", "sauron", "models", "index.ts"))).toBe(
@@ -607,7 +629,14 @@ describe("CLI main", () => {
 			}),
 		);
 
-		process.argv = ["node", "index.js", "--plugin", "angular", "--input", "swagger.json"];
+		process.argv = [
+			"node",
+			"index.js",
+			"--plugin",
+			"angular",
+			"--input",
+			"swagger.json",
+		];
 		await main();
 
 		expect(

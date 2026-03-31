@@ -1,9 +1,9 @@
 import { join } from "node:path";
+import { createFetchHttpMethods } from "../../generators/fetch";
 import {
 	createMissingSwaggerDefinitionsReport,
 	generateMissingSwaggerDefinitionsFile,
 } from "../../generators/missing-definitions";
-import { createFetchHttpMethods } from "../../generators/fetch";
 import {
 	createTypeCoverageReport,
 	generateTypeCoverageReportFile,
@@ -11,6 +11,7 @@ import {
 import type {
 	PluginCanRunResult,
 	PluginContext,
+	PluginFile,
 	PluginGenerateResult,
 	PluginOutputPaths,
 	SauronPlugin,
@@ -101,14 +102,9 @@ function resolveOutputs(context: PluginContext): PluginOutputPaths {
  * // result: PluginGenerateResult
  * ```
  */
-async function generate(
-	context: PluginContext,
-): Promise<PluginGenerateResult> {
+async function generate(context: PluginContext): Promise<PluginGenerateResult> {
 	const usedTypes = new Set<string>();
-	const {
-		methods: fetchMethods,
-		paramsInterfaces,
-	} = createFetchHttpMethods(
+	const { methods: fetchMethods, paramsInterfaces } = createFetchHttpMethods(
 		context.schema,
 		usedTypes,
 		context.operationTypes,
@@ -137,13 +133,13 @@ async function generate(
 	);
 	const typeCoverageFileContent =
 		generateTypeCoverageReportFile(typeCoverageReport);
-	const files = [
+	const files: PluginFile[] = [
 		{
-			path: outputPaths.servicePath,
+			path: outputPaths.servicePath ?? "",
 			content: `${context.fileHeader}\n${axiosService}`,
 		},
 		{
-			path: outputPaths.reportPath,
+			path: outputPaths.reportPath ?? "",
 			content: reportFileContent,
 		},
 	];

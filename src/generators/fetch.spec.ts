@@ -31,7 +31,7 @@ describe("Fetch generator", () => {
 			expect(
 				generateMethodName("/api/products", "post", {
 					tags: ["Product"],
-					requestBody: {},
+					requestBody: { content: {} },
 				}),
 			).toBe("PostProductCreate");
 			expect(

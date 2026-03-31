@@ -114,6 +114,83 @@ describe("Type coverage generator", () => {
 		expect(report.issues).toHaveLength(0);
 	});
 
+	test("should not report issues for DELETE endpoints", () => {
+		const schema = {
+			openapi: "3.0.3",
+			info: { title: "Coverage API", version: "1.0.0" },
+			paths: {
+				"/api/users/delete": {
+					delete: {
+						responses: {
+							"200": {
+								description: "Deleted",
+								content: {
+									"application/json": {
+										schema: { type: "object" },
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		};
+
+		const report = createTypeCoverageReport(schema as any);
+
+		expect(report.summary.responseBodies.untyped).toBe(0);
+		expect(report.issues).toHaveLength(0);
+	});
+
+	test("should not report issues for no-content responses (e.g. 204)", () => {
+		const schema = {
+			openapi: "3.0.3",
+			info: { title: "Coverage API", version: "1.0.0" },
+			paths: {
+				"/api/jobs/run": {
+					post: {
+						responses: {
+							"204": {
+								description: "No Content",
+							},
+						},
+					},
+				},
+			},
+		};
+
+		const report = createTypeCoverageReport(schema as any);
+
+		expect(report.summary.responseBodies.untyped).toBe(0);
+		expect(report.issues).toHaveLength(0);
+	});
+
+	test("should still report issues for non-DELETE endpoints with missing response schema", () => {
+		const schema = {
+			openapi: "3.0.3",
+			info: { title: "Coverage API", version: "1.0.0" },
+			paths: {
+				"/api/users": {
+					get: {
+						responses: {
+							"200": {
+								description: "Success",
+							},
+						},
+					},
+				},
+			},
+		};
+
+		const report = createTypeCoverageReport(schema as any);
+
+		expect(report.summary.responseBodies.untyped).toBe(1);
+		expect(report.issues).toHaveLength(1);
+		expect(report.issues[0]?.reason).toBe(
+			"Success response exists but no response schema was documented in content.",
+		);
+	});
+
 	test("should serialize report to json file content", () => {
 		const report = {
 			generatedAt: "2026-01-01T00:00:00.000Z",
@@ -158,14 +235,14 @@ describe("Type coverage generator", () => {
 					typed: 1,
 					untyped: 1,
 					coveragePercentage: 50,
-					untypedLocations: ["response.body"],
+					untypedLocations: ["response.body" as const],
 				},
 			],
 			issues: [
 				{
 					path: "/api/users",
 					method: "POST",
-					location: "response.body",
+					location: "response.body" as const,
 					reason: "No 2xx success response is documented for this operation.",
 				},
 			],
@@ -173,7 +250,7 @@ describe("Type coverage generator", () => {
 
 		const content = generateTypeCoverageReportFile(report);
 
-		expect(content).toContain("\"totalOperations\": 1");
+		expect(content).toContain('"totalOperations": 1');
 		expect(content.endsWith("\n")).toBe(true);
 	});
 });

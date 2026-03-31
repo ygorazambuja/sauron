@@ -1,5 +1,9 @@
 import { join } from "node:path";
 import {
+	createFetchHttpMethods,
+	generateFetchService,
+} from "../../generators/fetch";
+import {
 	createMissingSwaggerDefinitionsReport,
 	generateMissingSwaggerDefinitionsFile,
 } from "../../generators/missing-definitions";
@@ -7,13 +11,10 @@ import {
 	createTypeCoverageReport,
 	generateTypeCoverageReportFile,
 } from "../../generators/type-coverage";
-import {
-	createFetchHttpMethods,
-	generateFetchService,
-} from "../../generators/fetch";
 import type {
 	PluginCanRunResult,
 	PluginContext,
+	PluginFile,
 	PluginGenerateResult,
 	PluginOutputPaths,
 	SauronPlugin,
@@ -101,19 +102,15 @@ function resolveOutputs(context: PluginContext): PluginOutputPaths {
  * // result: PluginGenerateResult
  * ```
  */
-async function generate(
-	context: PluginContext,
-): Promise<PluginGenerateResult> {
+async function generate(context: PluginContext): Promise<PluginGenerateResult> {
 	const usedTypes = new Set<string>();
-	const {
-		methods: fetchMethods,
-		paramsInterfaces: fetchParamsInterfaces,
-	} = createFetchHttpMethods(
-		context.schema,
-		usedTypes,
-		context.operationTypes,
-		context.typeNameMap,
-	);
+	const { methods: fetchMethods, paramsInterfaces: fetchParamsInterfaces } =
+		createFetchHttpMethods(
+			context.schema,
+			usedTypes,
+			context.operationTypes,
+			context.typeNameMap,
+		);
 	const fetchService = generateFetchService(
 		fetchMethods,
 		context.modelsPath,
@@ -135,13 +132,13 @@ async function generate(
 	);
 	const typeCoverageFileContent =
 		generateTypeCoverageReportFile(typeCoverageReport);
-	const files = [
+	const files: PluginFile[] = [
 		{
-			path: outputPaths.servicePath,
+			path: outputPaths.servicePath ?? "",
 			content: `${context.fileHeader}\n${fetchService}`,
 		},
 		{
-			path: outputPaths.reportPath,
+			path: outputPaths.reportPath ?? "",
 			content: reportFileContent,
 		},
 	];

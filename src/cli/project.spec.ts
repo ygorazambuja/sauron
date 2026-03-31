@@ -62,6 +62,7 @@ describe("CLI project", () => {
 				angular: false,
 				http: false,
 				help: false,
+				shortNames: true,
 			});
 
 			expect(result.modelsPath).toBe(join("outputs", "models", "index.ts"));
@@ -75,6 +76,7 @@ describe("CLI project", () => {
 				angular: true,
 				http: false,
 				help: false,
+				shortNames: true,
 			});
 
 			expect(result.modelsPath).toBe(
@@ -89,6 +91,7 @@ describe("CLI project", () => {
 				angular: true,
 				http: false,
 				help: false,
+				shortNames: true,
 			});
 
 			expect(result.modelsPath).toBe(join("outputs", "models", "index.ts"));
@@ -102,6 +105,7 @@ describe("CLI project", () => {
 				angular: false,
 				http: false,
 				help: false,
+				shortNames: true,
 				output: customOutput,
 			});
 
@@ -115,6 +119,7 @@ describe("CLI project", () => {
 				angular: false,
 				http: false,
 				help: false,
+				shortNames: true,
 			});
 
 			expect(existsSync(join("outputs", "models"))).toBe(true);
@@ -126,6 +131,7 @@ describe("CLI project", () => {
 				input: "swagger.json",
 				angular: false,
 				http: true,
+				shortNames: true,
 				help: false,
 			});
 

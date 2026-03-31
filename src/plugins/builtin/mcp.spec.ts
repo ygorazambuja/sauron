@@ -53,7 +53,12 @@ describe("mcp plugin", () => {
 					},
 				},
 			},
-			options: { input: "swagger.json", angular: false, http: false, help: false },
+			options: {
+				input: "swagger.json",
+				angular: false,
+				http: false,
+				help: false,
+			},
 			baseOutputPath: "outputs",
 			modelsPath: "outputs/models/index.ts",
 			fileHeader: "",
@@ -64,16 +69,24 @@ describe("mcp plugin", () => {
 		} as any);
 
 		expect(result.methodCount).toBe(2);
-		expect(result.files.map((file) => file.path)).toContain("outputs/mcp/index.ts");
-		expect(result.files.map((file) => file.path)).toContain("outputs/mcp/server.ts");
+		expect(result.files.map((file) => file.path)).toContain(
+			"outputs/mcp/index.ts",
+		);
+		expect(result.files.map((file) => file.path)).toContain(
+			"outputs/mcp/server.ts",
+		);
 		expect(result.files.map((file) => file.path)).toContain(
 			"outputs/mcp/client/api.client.ts",
 		);
-		expect(result.files.map((file) => file.path)).toContain("outputs/mcp/tools/users.tool.ts");
+		expect(result.files.map((file) => file.path)).toContain(
+			"outputs/mcp/tools/users.tool.ts",
+		);
 		expect(result.files.map((file) => file.path)).toContain(
 			"outputs/mcp/tools/orders.tool.ts",
 		);
-		expect(result.files.map((file) => file.path)).toContain("outputs/mcp/types/users.types.ts");
+		expect(result.files.map((file) => file.path)).toContain(
+			"outputs/mcp/types/users.types.ts",
+		);
 		expect(result.files.map((file) => file.path)).toContain(
 			"outputs/mcp/schemas/users.schema.ts",
 		);
@@ -85,9 +98,11 @@ describe("mcp plugin", () => {
 			file.path.endsWith("tools/users.tool.ts"),
 		);
 		expect(usersTool?.content).toContain('"manage_users"');
-		expect(usersTool?.content).toContain('ACTIONS = ["list", "create", "update"]');
 		expect(usersTool?.content).toContain(
-			"Error \" + error.details.status + \": \" + error.details.message",
+			'ACTIONS = ["list", "create", "update"]',
+		);
+		expect(usersTool?.content).toContain(
+			'Error " + error.details.status + ": " + error.details.message',
 		);
 	});
 
@@ -110,7 +125,12 @@ describe("mcp plugin", () => {
 					},
 				},
 			},
-			options: { input: "swagger.json", angular: false, http: false, help: false },
+			options: {
+				input: "swagger.json",
+				angular: false,
+				http: false,
+				help: false,
+			},
 			baseOutputPath: "outputs",
 			modelsPath: "outputs/models/index.ts",
 			fileHeader: "",

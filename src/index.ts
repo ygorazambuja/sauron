@@ -38,7 +38,7 @@ export {
 	createDefaultPluginRegistry,
 	createPluginRegistry,
 } from "./plugins/registry";
-export { runPlugins, runHttpPlugins } from "./plugins/runner";
+export { runHttpPlugins, runPlugins } from "./plugins/runner";
 export type { PluginContext, SauronPlugin } from "./plugins/types";
 
 export { main };

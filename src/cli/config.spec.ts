@@ -108,6 +108,7 @@ describe("CLI config", () => {
 				plugin: ["fetch"],
 				help: false,
 				output: "cli-output",
+				shortNames: true,
 			},
 			{
 				input: "config.json",
@@ -127,6 +128,7 @@ describe("CLI config", () => {
 			plugin: ["fetch"],
 			output: "cli-output",
 			help: false,
+			shortNames: true,
 			config: undefined,
 		});
 	});
@@ -138,6 +140,7 @@ describe("CLI config", () => {
 				angular: false,
 				http: false,
 				help: false,
+				shortNames: true,
 			},
 			{
 				plugin: ["angular"],

@@ -1,6 +1,6 @@
 import { describe, expect, mock, spyOn, test } from "bun:test";
-import { runPlugins } from "./runner";
 import { createPluginRegistry } from "./registry";
+import { runPlugins } from "./runner";
 
 describe("plugin runner", () => {
 	test("should run the requested plugin", async () => {
@@ -11,7 +11,12 @@ describe("plugin runner", () => {
 				info: { title: "Runner Test", version: "1.0.0" },
 				paths: {},
 			},
-			options: { input: "swagger.json", angular: false, http: true, help: false },
+			options: {
+				input: "swagger.json",
+				angular: false,
+				http: true,
+				help: false,
+			},
 			baseOutputPath: "outputs",
 			modelsPath: "outputs/models/index.ts",
 			fileHeader: "",
@@ -89,7 +94,12 @@ describe("plugin runner", () => {
 				info: { title: "Runner Test", version: "1.0.0" },
 				paths: {},
 			},
-			options: { input: "swagger.json", angular: false, http: true, help: false },
+			options: {
+				input: "swagger.json",
+				angular: false,
+				http: true,
+				help: false,
+			},
 			baseOutputPath: "outputs",
 			modelsPath: "outputs/models/index.ts",
 			fileHeader: "",
@@ -108,7 +118,11 @@ describe("plugin runner", () => {
 					reason: "angular not available",
 					fallbackPluginId: "fetch",
 				}),
-				resolveOutputs: () => ({ artifacts: [], servicePath: "", reportPath: "" }),
+				resolveOutputs: () => ({
+					artifacts: [],
+					servicePath: "",
+					reportPath: "",
+				}),
 				generate: async () => ({ files: [], methodCount: 0 }),
 			},
 			{
@@ -153,7 +167,12 @@ describe("plugin runner", () => {
 				info: { title: "Runner Test", version: "1.0.0" },
 				paths: {},
 			},
-			options: { input: "swagger.json", angular: false, http: true, help: false },
+			options: {
+				input: "swagger.json",
+				angular: false,
+				http: true,
+				help: false,
+			},
 			baseOutputPath: "outputs",
 			modelsPath: "outputs/models/index.ts",
 			fileHeader: "",
@@ -164,8 +183,8 @@ describe("plugin runner", () => {
 		};
 
 		const registry = createPluginRegistry([]);
-		await expect(runPlugins(["missing"], context as any, registry)).rejects.toThrow(
-			'Unknown plugin "missing".',
-		);
+		await expect(
+			runPlugins(["missing"], context as any, registry),
+		).rejects.toThrow('Unknown plugin "missing".');
 	});
 });

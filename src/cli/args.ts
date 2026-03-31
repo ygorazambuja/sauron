@@ -195,9 +195,7 @@ Without flags, generates only TypeScript models.
  * // result: string[]
  * ```
  */
-function normalizePluginValues(
-	pluginValues: string | string[],
-): string[] {
+function normalizePluginValues(pluginValues: string | string[]): string[] {
 	if (Array.isArray(pluginValues)) {
 		return pluginValues
 			.map((plugin) => plugin.trim())

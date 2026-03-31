@@ -1,13 +1,13 @@
-import { dirname } from "node:path";
 import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import { createDefaultPluginRegistry, type PluginRegistry } from "./registry";
 import type {
 	PluginCanRunFailure,
 	PluginContext,
-	PluginOutputArtifact,
-	PluginOutputPaths,
 	PluginExecutionResult,
 	PluginFile,
+	PluginOutputArtifact,
+	PluginOutputPaths,
 	SauronPlugin,
 } from "./types";
 
@@ -105,9 +105,7 @@ function resolveRunnablePlugin(
 
 	warnPluginFailure(canRunResult);
 	if (!canRunResult.fallbackPluginId) {
-		throw new Error(
-			`Plugin "${plugin.id}" cannot run: ${canRunResult.reason}`,
-		);
+		throw new Error(`Plugin "${plugin.id}" cannot run: ${canRunResult.reason}`);
 	}
 
 	const fallbackPlugin = resolvePluginOrThrow(
