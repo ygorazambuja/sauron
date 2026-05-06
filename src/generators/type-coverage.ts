@@ -6,6 +6,13 @@ import type {
 	OperationTypeInfo,
 	OperationTypeMap,
 } from "../utils";
+import {
+	getOperationRequestSchema,
+	getParameterSchema,
+	getResponseSchema,
+	getSuccessResponse,
+	hasOperationRequestBody,
+} from "../utils/openapi-compat";
 
 /**
  * Type coverage location.
@@ -273,7 +280,7 @@ function collectParameterEntries(
 			continue;
 		}
 
-		const isTyped = !isSchemaAny(pathParameter.schema);
+		const isTyped = !isSchemaAny(getParameterSchema(pathParameter));
 		entries.push({
 			path,
 			method,
@@ -291,7 +298,7 @@ function collectParameterEntries(
 			continue;
 		}
 
-		const isTyped = !isSchemaAny(parameter.schema);
+		const isTyped = !isSchemaAny(getParameterSchema(parameter));
 		entries.push({
 			path,
 			method,
@@ -326,14 +333,14 @@ function collectRequestBodyEntry(
 	operation: OpenApiOperation,
 	typeInfo?: OperationTypeInfo,
 ): CoverageEntry | undefined {
-	if (!operation.requestBody) {
+	if (!hasOperationRequestBody(operation)) {
 		return undefined;
 	}
 
 	const requestType =
 		typeInfo?.requestType ?? extractRequestType(operation) ?? "any";
 	const isTyped = !containsAnyType(requestType);
-	const schema = getPreferredContentSchema(operation.requestBody.content);
+	const schema = getOperationRequestSchema(operation);
 
 	return {
 		path,
@@ -418,7 +425,7 @@ function collectResponseBodyEntry(
 	}
 
 	const isTyped = !containsAnyType(responseType);
-	const schema = getPreferredContentSchema(successResponse?.content);
+	const schema = getResponseSchema(successResponse);
 
 	return {
 		path,
@@ -614,84 +621,6 @@ function getPathPlaceholders(path: string): string[] {
 }
 
 /**
- * Get preferred content schema.
- * @param content Input parameter `content`.
- * @returns Get preferred content schema output as `Record<string, unknown> | undefined`.
- * @example
- * ```ts
- * const result = getPreferredContentSchema(undefined);
- * // result: Record<string, unknown> | undefined
- * ```
- */
-function getPreferredContentSchema(
-	content?: Record<string, { schema: Record<string, unknown> }>,
-): Record<string, unknown> | undefined {
-	if (!content) {
-		return undefined;
-	}
-
-	const jsonSchema = content["application/json"]?.schema;
-	if (jsonSchema && typeof jsonSchema === "object") {
-		return jsonSchema;
-	}
-
-	const firstKey = Object.keys(content)[0];
-	if (!firstKey) {
-		return undefined;
-	}
-
-	const firstSchema = content[firstKey]?.schema;
-	if (!firstSchema || typeof firstSchema !== "object") {
-		return undefined;
-	}
-
-	return firstSchema;
-}
-
-/**
- * Get success response.
- * @param operation Input parameter `operation`.
- * @returns Get success response output as `{ content?: Record<string, { schema: Record<string, unknown> }> } | undefined`.
- * @example
- * ```ts
- * const result = getSuccessResponse({});
- * // result: { content?: Record<string, { schema: Record<string, unknown> }> } | undefined
- * ```
- */
-function getSuccessResponse(
-	operation: OpenApiOperation,
-):
-	| { content?: Record<string, { schema: Record<string, unknown> }> }
-	| undefined {
-	const responses = operation.responses ?? {};
-
-	const response200 = responses["200"];
-	if (response200) {
-		return response200 as {
-			content?: Record<string, { schema: Record<string, unknown> }>;
-		};
-	}
-
-	const response201 = responses["201"];
-	if (response201) {
-		return response201 as {
-			content?: Record<string, { schema: Record<string, unknown> }>;
-		};
-	}
-
-	const successStatus = Object.keys(responses).find(
-		(statusCode) => statusCode.startsWith("2") && responses[statusCode],
-	);
-	if (!successStatus) {
-		return undefined;
-	}
-
-	return responses[successStatus] as {
-		content?: Record<string, { schema: Record<string, unknown> }>;
-	};
-}
-
-/**
  * Extract request type.
  * @param operation Input parameter `operation`.
  * @returns Extract request type output as `string | undefined`.
@@ -702,12 +631,7 @@ function getSuccessResponse(
  * ```
  */
 function extractRequestType(operation: OpenApiOperation): string | undefined {
-	const schema = getPreferredContentSchema(
-		operation.requestBody?.content as Record<
-			string,
-			{ schema: Record<string, unknown> }
-		>,
-	);
+	const schema = getOperationRequestSchema(operation);
 	if (!schema) {
 		return undefined;
 	}
@@ -751,7 +675,7 @@ function extractResponseType(operation: OpenApiOperation): string {
 		return "any";
 	}
 
-	const schema = getPreferredContentSchema(response.content);
+	const schema = getResponseSchema(response);
 	if (!schema) {
 		return "any";
 	}

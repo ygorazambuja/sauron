@@ -31,6 +31,12 @@
 import { readFile } from "node:fs/promises";
 import type { z } from "zod";
 import { SwaggerOrOpenAPISchema } from "../schemas/swagger";
+import {
+	getOperationRequestSchema,
+	getParameterSchema,
+	getSuccessResponseSchema,
+	hasOperationRequestBody,
+} from "./openapi-compat";
 
 /**
  * Represents an OpenAPI path operation (GET, POST, PUT, DELETE)
@@ -40,9 +46,13 @@ export type OpenApiOperation = {
 	operationId?: string;
 	parameters?: Array<{
 		name: string;
-		in: "query" | "path" | "header" | "cookie";
+		in: "query" | "path" | "header" | "cookie" | "body" | "formData";
 		required?: boolean;
-		schema: OpenApiSchema;
+		schema?: OpenApiSchema;
+		type?: string;
+		format?: string;
+		enum?: unknown[];
+		items?: OpenApiSchema;
 	}>;
 	requestBody?: {
 		content: Record<string, { schema: OpenApiSchema }>;
@@ -52,6 +62,7 @@ export type OpenApiOperation = {
 		{
 			description?: string;
 			content?: Record<string, { schema: OpenApiSchema }>;
+			schema?: OpenApiSchema;
 		}
 	>;
 };
@@ -477,55 +488,6 @@ function makeUniqueTypeName(name: string, usedNames: Set<string>): string {
 }
 
 /**
- * Get preferred content schema.
- * @example
- * ```ts
- * getPreferredContentSchema();
- * ```
- */
-function getPreferredContentSchema(
-	content?: Record<string, { schema: OpenApiSchema }>,
-): OpenApiSchema | undefined {
-	if (!content) {
-		return undefined;
-	}
-
-	if (content["application/json"]?.schema) {
-		return content["application/json"].schema;
-	}
-
-	const firstKey = Object.keys(content)[0];
-	return firstKey ? content[firstKey]?.schema : undefined;
-}
-
-/**
- * Get success response.
- * @param operation Input parameter `operation`.
- * @returns Get success response output as `unknown`.
- * @example
- * ```ts
- * const result = getSuccessResponse({});
- * // result: unknown
- * ```
- */
-function getSuccessResponse(
-	operation: OpenApiOperation,
-): { content?: Record<string, { schema: OpenApiSchema }> } | undefined {
-	const responses = operation.responses || {};
-	if (responses["200"]) {
-		return responses["200"];
-	}
-	if (responses["201"]) {
-		return responses["201"];
-	}
-
-	const successKey = Object.keys(responses).find(
-		(key) => key.startsWith("2") && responses[key],
-	);
-	return successKey ? responses[successKey] : undefined;
-}
-
-/**
  * Generate inline type definition.
  * @param typeName Input parameter `typeName`.
  * @param schema Input parameter `schema`.
@@ -633,12 +595,8 @@ function collectInlineOperationTypes(
 			}
 
 			const baseName = buildInlineBaseName(path, httpMethod, operation);
-			const requestSchema = getPreferredContentSchema(
-				operation.requestBody?.content,
-			);
-			const responseSchema = getPreferredContentSchema(
-				getSuccessResponse(operation)?.content,
-			);
+			const requestSchema = getOperationRequestSchema(operation);
+			const responseSchema = getSuccessResponseSchema(operation);
 
 			const requestType = resolveSchemaTypeName(
 				requestSchema,
@@ -802,15 +760,10 @@ function generateHttpMethod(
 
 		// Track used types for imports
 		if (requestType) {
-			usedTypes.add(requestType);
+			addParamTypeImports([requestType], usedTypes);
 		}
-		if (responseType !== "any" && !responseType.includes("[]")) {
-			// For single types (not arrays), add to imports
-			usedTypes.add(responseType);
-		} else if (responseType.includes("[]")) {
-			// For array types like "Type[]", extract "Type" and add to imports
-			const baseType = responseType.replace("[]", "");
-			usedTypes.add(baseType);
+		if (responseType !== "any") {
+			addParamTypeImports([responseType], usedTypes);
 		}
 
 		const methodBody = generateMethodBody(
@@ -907,7 +860,7 @@ function generateMethodName(
 	const hasPathParams = path.includes("{");
 	const hasQueryParams =
 		operation.parameters?.some((p) => p.in === "query") || false;
-	const hasBody = !!operation.requestBody;
+	const hasBody = hasOperationRequestBody(operation);
 
 	let additionalSuffix = "";
 	if (hasPathParams && httpMethod === "get") {
@@ -976,9 +929,10 @@ function buildParameterInfo(
 		for (const match of pathParamMatches) {
 			const paramName = match.slice(1, -1); // Remove { }
 			usedNames.add(paramName);
-			const schema = pathParamSchemas.find(
+			const parameter = pathParamSchemas.find(
 				(param) => param.name === paramName,
-			)?.schema;
+			);
+			const schema = parameter ? getParameterSchema(parameter) : undefined;
 			const type = schema
 				? convertParamSchemaToTypeScript(schema, components, typeNameMap)
 				: "any";
@@ -996,7 +950,7 @@ function buildParameterInfo(
 					varName,
 					required: !!param.required,
 					type: convertParamSchemaToTypeScript(
-						param.schema,
+						getParameterSchema(param) ?? {},
 						components,
 						typeNameMap,
 					),
@@ -1006,9 +960,13 @@ function buildParameterInfo(
 	}
 
 	// Extract request body parameter for POST/PUT/PATCH (always required)
-	if (operation.requestBody) {
-		const varName = makeUniqueName("body", "Payload");
-		bodyParam = { name: "body", varName };
+	if (hasOperationRequestBody(operation)) {
+		const bodyParameter = operation.parameters?.find(
+			(parameter) => parameter.in === "body",
+		);
+		const bodyName = bodyParameter?.name || "body";
+		const varName = makeUniqueName(bodyName, "Payload");
+		bodyParam = { name: bodyName, varName };
 	}
 
 	return { pathParams, queryParams, bodyParam };
@@ -1108,7 +1066,7 @@ function extractRequestType(
 	_components?: any,
 	typeNameMap?: TypeNameMap,
 ): string | undefined {
-	const schema = getPreferredContentSchema(operation.requestBody?.content);
+	const schema = getOperationRequestSchema(operation);
 	if (!schema) {
 		return undefined;
 	}
@@ -1147,24 +1105,8 @@ function extractResponseType(
 	_components?: any,
 	typeNameMap?: TypeNameMap,
 ): string {
-	// Look for 200 response first, then any 2xx response
-	const successKey = Object.keys(operation.responses || {}).find(
-		(key) => key.startsWith("2") && operation.responses?.[key],
-	);
-	const response =
-		operation.responses?.["200"] ||
-		operation.responses?.["201"] ||
-		(successKey ? operation.responses?.[successKey] : undefined);
-
-	if (!response || typeof response !== "object") {
-		return "any";
-	}
-
-	// Check for content with application/json
-	const content = (response as any).content;
-	if (content?.["application/json"]?.schema) {
-		const schema = content["application/json"].schema;
-
+	const schema = getSuccessResponseSchema(operation);
+	if (schema) {
 		// Handle $ref
 		if (schema.$ref && typeof schema.$ref === "string") {
 			const refParts = schema.$ref.split("/");
@@ -1181,8 +1123,7 @@ function extractResponseType(
 				: "any[]";
 		}
 
-		// Fallback to any for complex schemas
-		return "any";
+		return convertParamSchemaToTypeScript(schema, undefined, typeNameMap);
 	}
 
 	return "any";
@@ -1225,7 +1166,7 @@ function generateMethodBody(
 
 	const queryParams = paramInfo.queryParams || [];
 	const hasQueryParams = queryParams.length > 0;
-	const hasBody = !!operation.requestBody;
+	const hasBody = hasOperationRequestBody(operation);
 	const requiresBody = ["post", "put", "patch"].includes(httpMethod);
 	const bodyVarName = paramInfo.bodyParam?.varName || "body";
 	const bodyOption = bodyVarName === "body" ? "body" : `body: ${bodyVarName}`;

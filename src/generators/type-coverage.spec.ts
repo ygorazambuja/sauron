@@ -114,6 +114,46 @@ describe("Type coverage generator", () => {
 		expect(report.issues).toHaveLength(0);
 	});
 
+	test("should count Swagger 2 parameter body and response schemas as typed", () => {
+		const schema = {
+			swagger: "2.0",
+			info: { title: "Coverage API", version: "v1" },
+			paths: {
+				"/api/users/{id}": {
+					post: {
+						parameters: [
+							{ in: "path", name: "id", required: true, type: "integer" },
+							{ in: "query", name: "token", required: true, type: "string" },
+							{
+								in: "body",
+								name: "payload",
+								required: true,
+								schema: { $ref: "#/definitions/UserPayload" },
+							},
+						],
+						responses: {
+							"200": {
+								description: "OK",
+								schema: { $ref: "#/definitions/UserResult" },
+							},
+						},
+					},
+				},
+			},
+			definitions: {
+				UserPayload: { type: "object" },
+				UserResult: { type: "object" },
+			},
+		};
+
+		const report = createTypeCoverageReport(schema as any);
+
+		expect(report.totals.total).toBe(4);
+		expect(report.totals.typed).toBe(4);
+		expect(report.totals.untyped).toBe(0);
+		expect(report.issues).toHaveLength(0);
+	});
+
 	test("should not report issues for DELETE endpoints", () => {
 		const schema = {
 			openapi: "3.0.3",

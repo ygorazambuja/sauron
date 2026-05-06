@@ -3,10 +3,15 @@ import type { SwaggerOrOpenAPISchema } from "../schemas/swagger";
 import type {
 	OpenApiOperation,
 	OpenApiPath,
-	OpenApiSchema,
 	OperationTypeInfo,
 	OperationTypeMap,
 } from "../utils";
+import {
+	getOperationRequestSchema,
+	getParameterSchema,
+	getSuccessResponseSchema,
+	hasOperationRequestBody,
+} from "../utils/openapi-compat";
 
 /**
  * Generate method name.
@@ -36,7 +41,7 @@ export function generateMethodName(
 	const hasPathParams = path.includes("{");
 	const hasQueryParams =
 		operation.parameters?.some((p) => p.in === "query") || false;
-	const hasBody = !!operation.requestBody;
+	const hasBody = hasOperationRequestBody(operation);
 	const additionalSuffix = resolveMethodSuffix(
 		httpMethod,
 		hasPathParams,
@@ -381,9 +386,10 @@ function buildParameterInfo(
 		for (const match of pathParamMatches) {
 			const paramName = match.slice(1, -1);
 			usedNames.add(paramName);
-			const schema = pathParamSchemas.find(
+			const parameter = pathParamSchemas.find(
 				(param) => param.name === paramName,
-			)?.schema;
+			);
+			const schema = parameter ? getParameterSchema(parameter) : undefined;
 			const type = schema
 				? convertParamSchemaToType(schema, typeNameMap)
 				: "any";
@@ -399,15 +405,22 @@ function buildParameterInfo(
 					name: param.name,
 					varName,
 					required: !!param.required,
-					type: convertParamSchemaToType(param.schema, typeNameMap),
+					type: convertParamSchemaToType(
+						getParameterSchema(param),
+						typeNameMap,
+					),
 				});
 			}
 		}
 	}
 
-	if (operation.requestBody) {
-		const varName = makeUniqueName("body", "Payload");
-		bodyParam = { name: "body", varName };
+	if (hasOperationRequestBody(operation)) {
+		const bodyParameter = operation.parameters?.find(
+			(parameter) => parameter.in === "body",
+		);
+		const bodyName = bodyParameter?.name || "body";
+		const varName = makeUniqueName(bodyName, "Payload");
+		bodyParam = { name: bodyName, varName };
 	}
 
 	return { pathParams, queryParams, bodyParam };
@@ -508,22 +521,8 @@ export function extractResponseType(
 	_components?: any,
 	typeNameMap?: Map<string, string>,
 ): string {
-	const successKey = Object.keys(operation.responses || {}).find(
-		(key) => key.startsWith("2") && operation.responses?.[key],
-	);
-	const response =
-		operation.responses?.["200"] ||
-		operation.responses?.["201"] ||
-		(successKey ? operation.responses?.[successKey] : undefined);
-
-	if (!response || typeof response !== "object") {
-		return "any";
-	}
-
-	const content = (response as any).content;
-	if (content?.["application/json"]?.schema) {
-		const schema = content["application/json"].schema;
-
+	const schema = getSuccessResponseSchema(operation);
+	if (schema) {
 		if (schema.$ref && typeof schema.$ref === "string") {
 			const refParts = schema.$ref.split("/");
 			const typeName = refParts[refParts.length - 1];
@@ -538,32 +537,10 @@ export function extractResponseType(
 				: "any[]";
 		}
 
-		return "any";
+		return convertParamSchemaToType(schema, typeNameMap);
 	}
 
 	return "any";
-}
-
-/**
- * Get preferred content schema.
- * @example
- * ```ts
- * getPreferredContentSchema();
- * ```
- */
-function getPreferredContentSchema(
-	content?: Record<string, { schema: OpenApiSchema }>,
-): OpenApiSchema | undefined {
-	if (!content) {
-		return undefined;
-	}
-
-	if (content["application/json"]?.schema) {
-		return content["application/json"].schema;
-	}
-
-	const firstKey = Object.keys(content)[0];
-	return firstKey ? content[firstKey]?.schema : undefined;
 }
 
 /**
@@ -581,7 +558,7 @@ function extractRequestType(
 	operation: OpenApiOperation,
 	typeNameMap?: Map<string, string>,
 ): string | undefined {
-	const schema = getPreferredContentSchema(operation.requestBody?.content);
+	const schema = getOperationRequestSchema(operation);
 	if (!schema) {
 		return undefined;
 	}
@@ -766,17 +743,13 @@ function generateFetchMethod(
 				? `Promise<${responseType}>`
 				: "Promise<any>";
 
-		if (requestType) {
-			usedTypes?.add(requestType);
-		}
-		if (usedTypes && responseType !== "any" && !responseType.includes("[]")) {
-			usedTypes.add(responseType);
-		}
-		if (usedTypes && responseType.includes("[]")) {
-			const baseType = responseType.replace("[]", "");
-			usedTypes.add(baseType);
-		}
 		if (usedTypes) {
+			if (requestType) {
+				addParamTypeImports([requestType], usedTypes);
+			}
+			if (responseType !== "any") {
+				addParamTypeImports([responseType], usedTypes);
+			}
 			const paramTypes = [
 				...paramInfo.pathParams.map((param) => param.type),
 				...paramInfo.queryParams.map((param) => param.type),
@@ -820,7 +793,7 @@ function generateFetchMethod(
     'Content-Type': 'application/json',
   }`);
 
-		if (operation.requestBody) {
+		if (hasOperationRequestBody(operation)) {
 			const bodyVar = paramInfo.bodyParam?.varName || "body";
 			fetchOptions.push(`body: JSON.stringify(${bodyVar})`);
 		}
@@ -875,7 +848,7 @@ function buildFetchMethodWithQueryString(
     'Content-Type': 'application/json',
   }`);
 
-	if (operation.requestBody) {
+	if (hasOperationRequestBody(operation)) {
 		const bodyVar = paramInfo.bodyParam?.varName || "body";
 		fetchOptions.push(`body: JSON.stringify(${bodyVar})`);
 	}

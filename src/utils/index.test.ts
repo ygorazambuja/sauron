@@ -10,6 +10,7 @@ import { join } from "node:path";
 import {
 	createAngularHttpClientMethods,
 	createModels,
+	createModelsWithOperationTypes,
 	readJsonFile,
 	verifySwaggerComposition,
 } from "./index";
@@ -102,6 +103,42 @@ describe("OpenAPI to TypeScript Converter Utilities", () => {
 			const result = verifySwaggerComposition(validOpenApiSchema);
 			expect(result).toEqual(validOpenApiSchema);
 			expect(result.openapi).toBe("3.0.4");
+		});
+
+		test("should validate correct Swagger 2 schema", () => {
+			const validSwaggerSchema = {
+				swagger: "2.0",
+				info: {
+					title: "Legacy API",
+					version: "v1",
+				},
+				host: "api.example.com",
+				paths: {
+					"/users": {
+						get: {
+							responses: {
+								"200": {
+									description: "Success",
+									schema: { $ref: "#/definitions/User" },
+								},
+							},
+						},
+					},
+				},
+				definitions: {
+					User: {
+						type: "object",
+						properties: {
+							id: { type: "integer", format: "int32" },
+						},
+					},
+				},
+			};
+
+			const result = verifySwaggerComposition(validSwaggerSchema);
+
+			expect(result).toEqual(validSwaggerSchema);
+			expect(result.swagger).toBe("2.0");
 		});
 
 		test("should throw error for missing required fields", () => {
@@ -489,6 +526,73 @@ describe("OpenAPI to TypeScript Converter Utilities", () => {
 	});
 
 	describe("Complex integration tests", () => {
+		test("should generate typed Angular methods from Swagger 2 body and response schemas", () => {
+			const swaggerSchema = {
+				swagger: "2.0",
+				info: { title: "Legacy API", version: "v1" },
+				paths: {
+					"/v1/autenticacao/Autenticar": {
+						post: {
+							tags: ["Autenticacao"],
+							parameters: [
+								{
+									name: "credenciais",
+									in: "body",
+									required: true,
+									schema: { $ref: "#/definitions/DtoAutenticacao" },
+								},
+								{
+									name: "token",
+									in: "query",
+									required: true,
+									type: "string",
+								},
+							],
+							responses: {
+								"200": {
+									description: "OK",
+									schema: { $ref: "#/definitions/DtoPacote[DtoToken]" },
+								},
+							},
+						},
+					},
+				},
+				definitions: {
+					DtoAutenticacao: {
+						type: "object",
+						properties: { usuario: { type: "string" } },
+					},
+					"DtoPacote[DtoToken]": {
+						type: "object",
+						properties: { data: { type: "object" } },
+					},
+				},
+			};
+
+			const { operationTypes, typeNameMap } = createModelsWithOperationTypes(
+				swaggerSchema as any,
+			);
+			const { methods, imports, paramsInterfaces } =
+				createAngularHttpClientMethods(
+					swaggerSchema as any,
+					operationTypes,
+					typeNameMap,
+				);
+
+			expect(methods[0]).toContain(
+				"params: PostV1AutenticacaoAutenticarCreateParams",
+			);
+			expect(methods[0]).toContain("credenciais: DtoAutenticacao");
+			expect(methods[0]).toContain("Observable<DtoPacoteDtoToken>");
+			expect(methods[0]).toContain(
+				'return this.httpClient.post<DtoPacoteDtoToken>("/v1/autenticacao/Autenticar", credenciais, { params: { ...params } });',
+			);
+			expect(paramsInterfaces[0]).toContain("token: string;");
+			expect(imports).toContain("DtoAutenticacao");
+			expect(imports).toContain("DtoPacoteDtoToken");
+			expect(imports).not.toContain("string");
+		});
+
 		test("should generate methods with response types when schemas are available", () => {
 			const openApiSchema = {
 				openapi: "3.0.4",

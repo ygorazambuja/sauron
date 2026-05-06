@@ -98,6 +98,44 @@ describe("Missing definitions generator", () => {
 		expect(report.issues).toHaveLength(0);
 	});
 
+	test("should not report Swagger 2 parameter body or response schemas as missing", () => {
+		const schema = {
+			swagger: "2.0",
+			info: { title: "Legacy API", version: "v1" },
+			paths: {
+				"/api/users/{id}": {
+					post: {
+						parameters: [
+							{ in: "path", name: "id", required: true, type: "integer" },
+							{ in: "query", name: "token", required: true, type: "string" },
+							{
+								in: "body",
+								name: "payload",
+								required: true,
+								schema: { $ref: "#/definitions/UserPayload" },
+							},
+						],
+						responses: {
+							"200": {
+								description: "OK",
+								schema: { $ref: "#/definitions/UserResult" },
+							},
+						},
+					},
+				},
+			},
+			definitions: {
+				UserPayload: { type: "object" },
+				UserResult: { type: "object" },
+			},
+		};
+
+		const report = createMissingSwaggerDefinitionsReport(schema as any);
+
+		expect(report.totalIssues).toBe(0);
+		expect(report.issues).toHaveLength(0);
+	});
+
 	test("should not report response body issues for DELETE endpoints", () => {
 		const schema = {
 			openapi: "3.0.3",

@@ -145,6 +145,32 @@ describe("Fetch generator", () => {
 				} as any),
 			).toBe("any");
 		});
+
+		test("should extract Swagger 2 response schemas", () => {
+			expect(
+				extractResponseType({
+					responses: {
+						"200": {
+							description: "Success",
+							schema: { $ref: "#/definitions/DtoToken" },
+						},
+					},
+				} as any),
+			).toBe("DtoToken");
+			expect(
+				extractResponseType({
+					responses: {
+						"200": {
+							description: "Success",
+							schema: {
+								type: "array",
+								items: { $ref: "#/definitions/DtoItem" },
+							},
+						},
+					},
+				} as any),
+			).toBe("DtoItem[]");
+		});
 	});
 
 	describe("createFetchHttpMethods", () => {
@@ -318,6 +344,72 @@ describe("Fetch generator", () => {
 			);
 			expect(methods[0]).toContain("body: Dto");
 			expect(methods[0]).toContain("Promise<Dto>");
+		});
+
+		test("should generate typed fetch methods from Swagger 2 paths", () => {
+			const swaggerSchema = {
+				swagger: "2.0",
+				info: { title: "Legacy API", version: "v1" },
+				paths: {
+					"/v1/autenticacao/Autenticar": {
+						post: {
+							tags: ["Autenticacao"],
+							parameters: [
+								{
+									name: "credenciais",
+									in: "body",
+									required: true,
+									schema: { $ref: "#/definitions/DtoAutenticacao" },
+								},
+								{
+									name: "token",
+									in: "query",
+									required: true,
+									type: "string",
+								},
+							],
+							responses: {
+								"200": {
+									description: "OK",
+									schema: { $ref: "#/definitions/DtoPacote[DtoToken]" },
+								},
+							},
+						},
+					},
+				},
+				definitions: {
+					DtoAutenticacao: {
+						type: "object",
+						properties: { usuario: { type: "string" } },
+					},
+					"DtoPacote[DtoToken]": {
+						type: "object",
+						properties: { data: { type: "object" } },
+					},
+				},
+			};
+
+			const { operationTypes, typeNameMap } = createModelsWithOperationTypes(
+				swaggerSchema as any,
+			);
+			const usedTypes = new Set<string>();
+			const { methods, paramsInterfaces } = createFetchHttpMethods(
+				swaggerSchema as any,
+				usedTypes,
+				operationTypes,
+				typeNameMap,
+			);
+
+			expect(methods[0]).toContain(
+				"params: PostV1AutenticacaoAutenticarCreateParams",
+			);
+			expect(methods[0]).toContain("credenciais: DtoAutenticacao");
+			expect(methods[0]).toContain("Promise<DtoPacoteDtoToken>");
+			expect(methods[0]).toContain("body: JSON.stringify(credenciais)");
+			expect(paramsInterfaces[0]).toContain("token: string;");
+			expect(usedTypes.has("DtoAutenticacao")).toBe(true);
+			expect(usedTypes.has("DtoPacoteDtoToken")).toBe(true);
+			expect(usedTypes.has("string")).toBe(false);
 		});
 
 		test("should handle no paths and multiple HTTP methods", () => {
