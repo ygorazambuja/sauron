@@ -29,6 +29,22 @@ export function getPreferredContentSchema(
 }
 
 /**
+ * Check whether a response schema represents binary content.
+ * @param schema Response schema to inspect.
+ * @returns True when the schema is `string` with `binary` format.
+ * @example
+ * ```ts
+ * const isBinary = isBinaryResponseSchema({ type: "string", format: "binary" });
+ * // isBinary: true
+ * ```
+ */
+export function isBinaryResponseSchema(
+	schema: OpenApiSchema | undefined,
+): boolean {
+	return schema?.type === "string" && schema.format === "binary";
+}
+
+/**
  * Get schema from an OpenAPI 3 parameter or Swagger 2 parameter.
  * @param parameter Operation parameter.
  * @returns Parameter schema when documented.
@@ -156,7 +172,28 @@ export function getResponseSchema(
 		return jsonSchema;
 	}
 
+	const binarySchema = getResponseBinarySchema(response);
+	if (binarySchema) {
+		return binarySchema;
+	}
+
 	return response.schema;
+}
+
+/**
+ * Check whether the preferred success response contains a binary schema.
+ * @param operation Operation object.
+ * @returns True when the selected 2xx response schema is binary.
+ * @example
+ * ```ts
+ * const hasBinary = hasSuccessResponseBinarySchema({ responses: { "200": { schema: { type: "string", format: "binary" } } } });
+ * // hasBinary: true
+ * ```
+ */
+export function hasSuccessResponseBinarySchema(
+	operation: OpenApiOperation,
+): boolean {
+	return isBinaryResponseSchema(getSuccessResponseSchema(operation));
 }
 
 /**
@@ -173,6 +210,55 @@ export function getSuccessResponseSchema(
 	operation: OpenApiOperation,
 ): OpenApiSchema | undefined {
 	return getResponseSchema(getSuccessResponse(operation));
+}
+
+/**
+ * Get the binary schema from a response object.
+ * @param response Operation response.
+ * @returns Binary schema when documented in response schema or content.
+ * @example
+ * ```ts
+ * const schema = getResponseBinarySchema({ content: { "application/json": { schema: { type: "string", format: "binary" } } } });
+ * // schema: { type: "string", format: "binary" }
+ * ```
+ */
+function getResponseBinarySchema(
+	response: OpenApiResponse | undefined,
+): OpenApiSchema | undefined {
+	if (!response || typeof response !== "object") {
+		return undefined;
+	}
+
+	if (isBinaryResponseSchema(response.schema)) {
+		return response.schema;
+	}
+
+	return getBinaryContentSchema(response.content);
+}
+
+/**
+ * Get the binary schema from an OpenAPI content map.
+ * @param content Response content map.
+ * @returns Binary schema when every media type documents binary content.
+ * @example
+ * ```ts
+ * const schema = getBinaryContentSchema({ "text/plain": { schema: { type: "string", format: "binary" } } });
+ * // schema: { type: "string", format: "binary" }
+ * ```
+ */
+function getBinaryContentSchema(
+	content?: Record<string, { schema: OpenApiSchema }>,
+): OpenApiSchema | undefined {
+	if (!content) {
+		return undefined;
+	}
+
+	const schemas = Object.values(content).map((entry) => entry.schema);
+	if (schemas.length === 0) {
+		return undefined;
+	}
+
+	return schemas.every(isBinaryResponseSchema) ? schemas[0] : undefined;
 }
 
 /**

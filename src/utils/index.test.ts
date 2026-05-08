@@ -679,6 +679,146 @@ describe("OpenAPI to TypeScript Converter Utilities", () => {
 			expect(imports).toContain("UserDto");
 		});
 
+		test("should generate Blob response and blob responseType for binary schemas", () => {
+			const openApiSchema = {
+				openapi: "3.0.4",
+				info: { title: "Test API", version: "1.0.0" },
+				paths: {
+					"/api/files/{id}": {
+						get: {
+							parameters: [
+								{
+									name: "id",
+									in: "path",
+									required: true,
+									schema: { type: "integer", format: "int32" },
+								},
+							],
+							responses: {
+								"200": {
+									description: "OK",
+									content: {
+										"application/json": {
+											schema: { type: "string", format: "binary" },
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			};
+
+			const { models, operationTypes, typeNameMap } =
+				createModelsWithOperationTypes(openApiSchema);
+			const { methods, imports } = createAngularHttpClientMethods(
+				openApiSchema,
+				operationTypes,
+				typeNameMap,
+			);
+
+			expect(models).toContain("export type GetFilesByIdResponse = Blob;");
+			expect(methods[0]).toContain(
+				"GetFilesById(id: number): Observable<GetFilesByIdResponse>",
+			);
+			expect(methods[0]).toContain(
+				'return this.httpClient.get(`/api/files/${id}`, { responseType: "blob" });',
+			);
+			expect(imports).toContain("GetFilesByIdResponse");
+			expect(imports).not.toContain("Blob");
+		});
+
+		test("should preserve JSON when binary alternatives are also documented", () => {
+			const openApiSchema = {
+				openapi: "3.0.4",
+				info: { title: "Test API", version: "1.0.0" },
+				paths: {
+					"/api/reports/{id}": {
+						get: {
+							parameters: [
+								{
+									name: "id",
+									in: "path",
+									required: true,
+									schema: { type: "integer", format: "int32" },
+								},
+							],
+							responses: {
+								"200": {
+									description: "OK",
+									content: {
+										"application/json": {
+											schema: { $ref: "#/components/schemas/ReportDto" },
+										},
+										"application/octet-stream": {
+											schema: { type: "string", format: "binary" },
+										},
+									},
+								},
+							},
+						},
+					},
+					"/api/jobs/{id}": {
+						get: {
+							parameters: [
+								{
+									name: "id",
+									in: "path",
+									required: true,
+									schema: { type: "integer", format: "int32" },
+								},
+							],
+							responses: {
+								"200": {
+									description: "OK",
+									content: {
+										"application/json": {
+											schema: { $ref: "#/components/schemas/JobDto" },
+										},
+									},
+								},
+								"206": {
+									description: "Partial content",
+									content: {
+										"application/octet-stream": {
+											schema: { type: "string", format: "binary" },
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				components: {
+					schemas: {
+						ReportDto: {
+							type: "object",
+							properties: { id: { type: "integer" } },
+						},
+						JobDto: {
+							type: "object",
+							properties: { id: { type: "integer" } },
+						},
+					},
+				},
+			};
+
+			const { methods } = createAngularHttpClientMethods(openApiSchema);
+			const reportMethod = methods.find((method) =>
+				method.includes("GetReportsById"),
+			);
+			const jobMethod = methods.find((method) =>
+				method.includes("GetJobsById"),
+			);
+
+			expect(reportMethod).toContain("Observable<ReportDto>");
+			expect(reportMethod).toContain("this.httpClient.get<ReportDto>");
+			expect(reportMethod).not.toContain('responseType: "blob"');
+			expect(jobMethod).toContain("Observable<JobDto>");
+			expect(jobMethod).toContain("this.httpClient.get<JobDto>");
+			expect(jobMethod).not.toContain('responseType: "blob"');
+		});
+
 		test("should handle missing requestBody and date-time query params", () => {
 			const openApiSchema = {
 				openapi: "3.0.4",

@@ -11,6 +11,7 @@ import {
 	getParameterSchema,
 	getSuccessResponseSchema,
 	hasOperationRequestBody,
+	hasSuccessResponseBinarySchema,
 } from "../utils/openapi-compat";
 
 /**
@@ -283,6 +284,9 @@ const primitiveSchemaTypeMap: Record<string, string> = {
  * ```
  */
 function resolvePrimitiveSchemaType(schema: any): string {
+	if (schema.type === "string" && schema.format === "binary") {
+		return "Blob";
+	}
 	if (schema.type === "string" && schema.format === "numeric") {
 		return "number";
 	}
@@ -317,6 +321,7 @@ function addParamTypeImports(paramTypes: string[], usedTypes: Set<string>) {
 				part === "object" ||
 				part === "null" ||
 				part === "undefined" ||
+				part === "Blob" ||
 				part === "Date"
 			) {
 				continue;
@@ -799,9 +804,10 @@ function generateFetchMethod(
 		}
 
 		const optionsString = fetchOptions.join(",\n    ");
-		const returnStatement = isNoContent
-			? ""
-			: "\n\n    return await response.json();";
+		const returnStatement = buildFetchReturnStatement(
+			isNoContent,
+			hasSuccessResponseBinarySchema(operation),
+		);
 
 		return {
 			method: `  async ${methodName}(${parameters}): ${returnType} {
@@ -854,9 +860,10 @@ function buildFetchMethodWithQueryString(
 	}
 
 	const optionsString = fetchOptions.join(",\n    ");
-	const returnStatement = isNoContent
-		? ""
-		: "\n\n    return await response.json();";
+	const returnStatement = buildFetchReturnStatement(
+		isNoContent,
+		hasSuccessResponseBinarySchema(operation),
+	);
 
 	return `  async ${methodName}(${parameters}): ${returnType} {
     ${queryStringLine}
@@ -868,6 +875,32 @@ function buildFetchMethodWithQueryString(
       throw new Error(\`HTTP error! status: \${response.status}\`);
     }${returnStatement}
   }`;
+}
+
+/**
+ * Build the fetch response reader statement.
+ * @param isNoContent Whether the operation has no response body.
+ * @param isBinaryResponse Whether the operation returns binary content.
+ * @returns Fetch response reader statement.
+ * @example
+ * ```ts
+ * const statement = buildFetchReturnStatement(false, true);
+ * // statement: "\n\n    return await response.blob();"
+ * ```
+ */
+function buildFetchReturnStatement(
+	isNoContent: boolean,
+	isBinaryResponse: boolean,
+): string {
+	if (isNoContent) {
+		return "";
+	}
+
+	if (isBinaryResponse) {
+		return "\n\n    return await response.blob();";
+	}
+
+	return "\n\n    return await response.json();";
 }
 
 /**

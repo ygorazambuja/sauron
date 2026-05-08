@@ -36,6 +36,7 @@ import {
 	getParameterSchema,
 	getSuccessResponseSchema,
 	hasOperationRequestBody,
+	hasSuccessResponseBinarySchema,
 } from "./openapi-compat";
 
 /**
@@ -1156,12 +1157,17 @@ function generateMethodBody(
 	const hasPathParams = path.includes("{");
 	if (hasPathParams) {
 		url = `\`${url}\``;
-	} else {
+	}
+	if (!hasPathParams) {
 		url = `"${url}"`;
 	}
 
-	// Build HttpClient method call
-	const httpClientMethod = `this.httpClient.${httpMethod}<${responseType}>`;
+	const isBinaryResponse = hasSuccessResponseBinarySchema(operation);
+	const httpClientMethod = buildAngularHttpClientMethod(
+		httpMethod,
+		responseType,
+		isBinaryResponse,
+	);
 	const args = [url];
 
 	const queryParams = paramInfo.queryParams || [];
@@ -1172,32 +1178,75 @@ function generateMethodBody(
 	const bodyOption = bodyVarName === "body" ? "body" : `body: ${bodyVarName}`;
 
 	if (httpMethod === "delete") {
-		if (hasQueryParams && hasBody) {
-			args.push(`{ ${bodyOption}, params: { ...params } }`);
-			return `    return ${httpClientMethod}(${args.join(", ")});`;
-		}
-		if (hasBody) {
-			args.push(`{ ${bodyOption} }`);
-			return `    return ${httpClientMethod}(${args.join(", ")});`;
-		}
-		if (hasQueryParams) {
-			args.push(`{ params: { ...params } }`);
-			return `    return ${httpClientMethod}(${args.join(", ")});`;
+		const options = buildAngularRequestOptions([
+			...(hasBody ? [bodyOption] : []),
+			...(hasQueryParams ? ["params: { ...params }"] : []),
+			...(isBinaryResponse ? ['responseType: "blob"'] : []),
+		]);
+		if (options) {
+			args.push(options);
 		}
 		return `    return ${httpClientMethod}(${args.join(", ")});`;
 	}
 
 	if (hasBody) {
 		args.push(bodyVarName);
-	} else if (requiresBody) {
+	}
+	if (!hasBody && requiresBody) {
 		args.push("null");
 	}
 
-	if (hasQueryParams) {
-		args.push(`{ params: { ...params } }`);
+	const options = buildAngularRequestOptions([
+		...(hasQueryParams ? ["params: { ...params }"] : []),
+		...(isBinaryResponse ? ['responseType: "blob"'] : []),
+	]);
+	if (options) {
+		args.push(options);
 	}
 
 	return `    return ${httpClientMethod}(${args.join(", ")});`;
+}
+
+/**
+ * Build an Angular HttpClient method reference.
+ * @param httpMethod HTTP verb used by the operation.
+ * @param responseType TypeScript response type.
+ * @param isBinaryResponse Whether the operation returns binary content.
+ * @returns HttpClient method expression.
+ * @example
+ * ```ts
+ * const method = buildAngularHttpClientMethod("get", "User", false);
+ * // method: "this.httpClient.get<User>"
+ * ```
+ */
+function buildAngularHttpClientMethod(
+	httpMethod: string,
+	responseType: string,
+	isBinaryResponse: boolean,
+): string {
+	if (isBinaryResponse) {
+		return `this.httpClient.${httpMethod}`;
+	}
+
+	return `this.httpClient.${httpMethod}<${responseType}>`;
+}
+
+/**
+ * Build an Angular request options object.
+ * @param entries Object entries to include in the request options.
+ * @returns Options object literal or undefined when no options are needed.
+ * @example
+ * ```ts
+ * const options = buildAngularRequestOptions(['responseType: "blob"']);
+ * // options: '{ responseType: "blob" }'
+ * ```
+ */
+function buildAngularRequestOptions(entries: string[]): string | undefined {
+	if (entries.length === 0) {
+		return undefined;
+	}
+
+	return `{ ${entries.join(", ")} }`;
 }
 
 /**
@@ -1289,6 +1338,10 @@ function convertParamSchemaToTypeScript(
 		return `${itemType}[]`;
 	}
 
+	if (schema.type === "string" && schema.format === "binary") {
+		return "Blob";
+	}
+
 	// For params, date-time should be string
 	if (schema.type === "string" && schema.format === "date-time") {
 		return "string";
@@ -1325,6 +1378,7 @@ function addParamTypeImports(paramTypes: string[], usedTypes: Set<string>) {
 				part === "object" ||
 				part === "null" ||
 				part === "undefined" ||
+				part === "Blob" ||
 				part === "Date"
 			) {
 				continue;
@@ -1412,6 +1466,10 @@ function convertSchemaToTypeScript(
 	if (schema.type === "array" && schema.items) {
 		const itemType = convertSchemaToTypeScript(schema.items, typeNameMap);
 		return `${itemType}[]`;
+	}
+
+	if (schema.type === "string" && schema.format === "binary") {
+		return "Blob";
 	}
 
 	// Handle inline object schemas

@@ -171,6 +171,68 @@ describe("Fetch generator", () => {
 				} as any),
 			).toBe("DtoItem[]");
 		});
+
+		test("should extract Blob for binary response schemas", () => {
+			expect(
+				extractResponseType({
+					responses: {
+						"200": {
+							description: "OK",
+							content: {
+								"text/plain": {
+									schema: { type: "string", format: "binary" },
+								},
+								"application/json": {
+									schema: { type: "string", format: "binary" },
+								},
+							},
+						},
+					},
+				} as any),
+			).toBe("Blob");
+		});
+
+		test("should preserve preferred JSON response when binary alternatives exist", () => {
+			expect(
+				extractResponseType({
+					responses: {
+						"200": {
+							description: "OK",
+							content: {
+								"application/json": {
+									schema: { $ref: "#/components/schemas/User" },
+								},
+								"application/octet-stream": {
+									schema: { type: "string", format: "binary" },
+								},
+							},
+						},
+					},
+				} as any),
+			).toBe("User");
+			expect(
+				extractResponseType({
+					responses: {
+						"200": {
+							description: "OK",
+							content: {
+								"application/json": {
+									schema: { $ref: "#/components/schemas/User" },
+								},
+							},
+						},
+						"206": {
+							description: "Partial content",
+							content: {
+								"application/octet-stream": {
+									schema: { type: "string", format: "binary" },
+								},
+							},
+						},
+					},
+				} as any),
+			).toBe("User");
+		});
 	});
 
 	describe("createFetchHttpMethods", () => {
