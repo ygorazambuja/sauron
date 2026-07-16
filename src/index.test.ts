@@ -19,5 +19,9 @@ describe("Public API exports", () => {
 		expect(typeof sauron.generateFetchService).toBe("function");
 		expect(typeof sauron.generateMethodName).toBe("function");
 		expect(typeof sauron.createGeneratedFileHeader).toBe("function");
+		expect(typeof sauron.readOpenApiFile).toBe("function");
+		expect(typeof sauron.fetchOpenApiFromUrl).toBe("function");
+		expect(sauron.readJsonFile).toBe(sauron.readOpenApiFile);
+		expect(sauron.fetchJsonFromUrl).toBe(sauron.fetchOpenApiFromUrl);
 	});
 });

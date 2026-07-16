@@ -1,7 +1,7 @@
 /**
  * OpenAPI to TypeScript Converter Utilities
  *
- * This module provides utilities to convert OpenAPI/Swagger JSON schemas
+ * This module provides utilities to convert OpenAPI/Swagger JSON or YAML schemas
  * into TypeScript interface and type definitions. It handles:
  *
  * - Object schemas → TypeScript interfaces
@@ -14,9 +14,9 @@
  *
  * @example
  * ```typescript
- * import { readJsonFile, verifySwaggerComposition, createModels } from './utils';
+ * import { readOpenApiFile, verifySwaggerComposition, createModels } from './utils';
  *
- * const swaggerData = await readJsonFile('swagger.json');
+ * const swaggerData = await readOpenApiFile('openapi.yaml');
  * const validatedSchema = verifySwaggerComposition(swaggerData);
  * const typeDefinitions = createModels(validatedSchema);
  *
@@ -29,6 +29,7 @@
  */
 
 import { readFile } from "node:fs/promises";
+import { parse } from "yaml";
 import type { z } from "zod";
 import { SwaggerOrOpenAPISchema } from "../schemas/swagger";
 import {
@@ -106,41 +107,55 @@ export type OperationTypeMap = Record<
 export type TypeNameMap = Map<string, string>;
 
 /**
- * Read json file.
- * @param filePath Input parameter `filePath`.
- * @returns Read json file output as `Promise<unknown>`.
+ * Parse an OpenAPI document written as JSON or YAML.
+ * @param content Raw OpenAPI document content.
+ * @returns Parsed OpenAPI document.
  * @example
  * ```ts
- * const result = await readJsonFile("value");
+ * const result = parseOpenApiDocument("openapi: 3.0.4");
+ * // result: { openapi: "3.0.4" }
+ * ```
+ */
+function parseOpenApiDocument(content: string): unknown {
+	return parse(content);
+}
+
+/**
+ * Read an OpenAPI JSON or YAML file.
+ * @param filePath Input parameter `filePath`.
+ * @returns Parsed OpenAPI document.
+ * @example
+ * ```ts
+ * const result = await readOpenApiFile("openapi.yaml");
  * // result: unknown
  * ```
  */
-export async function readJsonFile(filePath: string): Promise<unknown> {
+export async function readOpenApiFile(filePath: string): Promise<unknown> {
 	if (!filePath || typeof filePath !== "string") {
 		throw new Error("File path must be a non-empty string");
 	}
 
 	try {
 		const content = await readFile(filePath, "utf-8");
-		return JSON.parse(content);
+		return parseOpenApiDocument(content);
 	} catch (error) {
 		throw new Error(
-			`Failed to read or parse JSON file "${filePath}": ${error}`,
+			`Failed to read or parse OpenAPI JSON/YAML file "${filePath}": ${error}`,
 		);
 	}
 }
 
 /**
- * Fetch json from url.
+ * Fetch an OpenAPI JSON or YAML document from a URL.
  * @param url Input parameter `url`.
- * @returns Fetch json from url output as `Promise<unknown>`.
+ * @returns Parsed OpenAPI document.
  * @example
  * ```ts
- * const result = await fetchJsonFromUrl("value");
+ * const result = await fetchOpenApiFromUrl("https://example.com/openapi.yaml");
  * // result: unknown
  * ```
  */
-export async function fetchJsonFromUrl(url: string): Promise<unknown> {
+export async function fetchOpenApiFromUrl(url: string): Promise<unknown> {
 	if (!url || typeof url !== "string") {
 		throw new Error("URL must be a non-empty string");
 	}
@@ -158,11 +173,19 @@ export async function fetchJsonFromUrl(url: string): Promise<unknown> {
 			throw new Error(`HTTP error! status: ${response.status}`);
 		}
 		const content = await readLimitedResponseText(response);
-		return JSON.parse(content);
+		return parseOpenApiDocument(content);
 	} catch (error) {
-		throw new Error(`Failed to fetch or parse JSON from "${url}": ${error}`);
+		throw new Error(
+			`Failed to fetch or parse OpenAPI JSON/YAML from "${url}": ${error}`,
+		);
 	}
 }
+
+/** @deprecated Use {@link readOpenApiFile}. */
+export const readJsonFile = readOpenApiFile;
+
+/** @deprecated Use {@link fetchOpenApiFromUrl}. */
+export const fetchJsonFromUrl = fetchOpenApiFromUrl;
 
 /**
  * Read a response body while enforcing the OpenAPI document size limit.

@@ -12,7 +12,9 @@ import {
 	createModels,
 	createModelsWithOperationTypes,
 	fetchJsonFromUrl,
+	fetchOpenApiFromUrl,
 	readJsonFile,
+	readOpenApiFile,
 	verifySwaggerComposition,
 } from "./index";
 
@@ -28,7 +30,7 @@ describe("OpenAPI to TypeScript Converter Utilities", () => {
 		rmSync(tempDir, { recursive: true, force: true });
 	});
 
-	describe("fetchJsonFromUrl", () => {
+	describe("fetchOpenApiFromUrl", () => {
 		const originalFetch = globalThis.fetch;
 
 		afterEach(() => {
@@ -41,8 +43,18 @@ describe("OpenAPI to TypeScript Converter Utilities", () => {
 			) as unknown as typeof fetch;
 
 			await expect(
-				fetchJsonFromUrl("https://example.com/openapi.json"),
+				fetchOpenApiFromUrl("https://example.com/openapi.json"),
 			).resolves.toEqual({ openapi: "3.0.0" });
+		});
+
+		test("should fetch and parse YAML without relying on the URL extension", async () => {
+			globalThis.fetch = mock(
+				async () => new Response("openapi: 3.0.4\npaths: {}"),
+			) as unknown as typeof fetch;
+
+			await expect(
+				fetchOpenApiFromUrl("https://example.com/spec"),
+			).resolves.toEqual({ openapi: "3.0.4", paths: {} });
 		});
 
 		test("should reject non-HTTP protocols without fetching", async () => {
@@ -51,7 +63,7 @@ describe("OpenAPI to TypeScript Converter Utilities", () => {
 			) as unknown as typeof fetch;
 
 			await expect(
-				fetchJsonFromUrl("file:///tmp/openapi.json"),
+				fetchOpenApiFromUrl("file:///tmp/openapi.json"),
 			).rejects.toThrow("URL protocol must be HTTP or HTTPS");
 			expect(globalThis.fetch).not.toHaveBeenCalled();
 		});
@@ -65,49 +77,77 @@ describe("OpenAPI to TypeScript Converter Utilities", () => {
 			) as unknown as typeof fetch;
 
 			await expect(
-				fetchJsonFromUrl("https://example.com/openapi.json"),
+				fetchOpenApiFromUrl("https://example.com/openapi.json"),
 			).rejects.toThrow("OpenAPI response exceeds the 10 MB limit");
+		});
+
+		test("should preserve the legacy JSON alias", () => {
+			expect(fetchJsonFromUrl).toBe(fetchOpenApiFromUrl);
 		});
 	});
 
-	describe("readJsonFile", () => {
+	describe("readOpenApiFile", () => {
 		test("should read and parse valid JSON file", async () => {
 			const testData = { name: "test", value: 42 };
 			const filePath = join(tempDir, "test.json");
 			writeFileSync(filePath, JSON.stringify(testData));
 
-			const result = await readJsonFile(filePath);
+			const result = await readOpenApiFile(filePath);
 			expect(result).toEqual(testData);
+		});
+
+		test("should read and parse YAML files", async () => {
+			const filePath = join(tempDir, "openapi.yaml");
+			writeFileSync(filePath, "openapi: 3.0.4\ninfo:\n  title: Test API\n");
+
+			await expect(readOpenApiFile(filePath)).resolves.toEqual({
+				openapi: "3.0.4",
+				info: { title: "Test API" },
+			});
+		});
+
+		test("should read YAML content from yml files", async () => {
+			const filePath = join(tempDir, "openapi.yml");
+			writeFileSync(filePath, "swagger: '2.0'\npaths: {}\n");
+
+			await expect(readOpenApiFile(filePath)).resolves.toEqual({
+				swagger: "2.0",
+				paths: {},
+			});
 		});
 
 		test("should throw error for non-existent file", async () => {
 			const nonExistentPath = join(tempDir, "non-existent.json");
 
-			await expect(readJsonFile(nonExistentPath)).rejects.toThrow(
-				"Failed to read or parse JSON file",
+			await expect(readOpenApiFile(nonExistentPath)).rejects.toThrow(
+				"Failed to read or parse OpenAPI JSON/YAML file",
 			);
 		});
 
-		test("should throw error for invalid JSON", async () => {
-			const filePath = join(tempDir, "invalid.json");
-			writeFileSync(filePath, "{ invalid json }");
+		test("should throw error for invalid OpenAPI content", async () => {
+			const filePath = join(tempDir, "invalid.yaml");
+			writeFileSync(filePath, "openapi: [3.0.4");
 
-			await expect(readJsonFile(filePath)).rejects.toThrow(
-				"Failed to read or parse JSON file",
+			await expect(readOpenApiFile(filePath)).rejects.toThrow(
+				"Failed to read or parse OpenAPI JSON/YAML file",
 			);
 		});
 
 		test("should throw error for empty file path", async () => {
-			await expect(readJsonFile("")).rejects.toThrow(
+			await expect(readOpenApiFile("")).rejects.toThrow(
 				"File path must be a non-empty string",
 			);
 		});
 
 		test("should throw error for non-string file path", async () => {
 			// @ts-expect-error Testing invalid input
-			await expect(readJsonFile(123)).rejects.toThrow(
+			await expect(readOpenApiFile(123)).rejects.toThrow(
 				"File path must be a non-empty string",
 			);
+		});
+
+		test("should preserve the legacy JSON alias", () => {
+			expect(readJsonFile).toBe(readOpenApiFile);
 		});
 	});
 

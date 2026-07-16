@@ -40,6 +40,12 @@ export {
 } from "./plugins/registry";
 export { runHttpPlugins, runPlugins } from "./plugins/runner";
 export type { PluginContext, SauronPlugin } from "./plugins/types";
+export {
+	fetchJsonFromUrl,
+	fetchOpenApiFromUrl,
+	readJsonFile,
+	readOpenApiFile,
+} from "./utils";
 
 export { main };
 

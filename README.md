@@ -1,6 +1,6 @@
 # OpenAPI to TypeScript Converter
 
-Este projeto converte automaticamente schemas OpenAPI/Swagger JSON em definições TypeScript (interfaces e tipos).
+Este projeto converte automaticamente schemas OpenAPI/Swagger em JSON ou YAML para definições TypeScript (interfaces e tipos).
 
 ## Funcionalidades
 
@@ -17,6 +17,7 @@ Este projeto converte automaticamente schemas OpenAPI/Swagger JSON em definiçõ
 - ✅ **Seleção explícita de plugin**: `--plugin <id>` (aceita múltiplos)
 - ✅ **Compatibilidade retroativa**: `--http` e `--angular` continuam funcionando como aliases
 - ✅ **Relatório de definições ausentes**: Cada plugin HTTP gera relatório com os pontos que viraram `any`
+- ✅ **Entrada JSON ou YAML**: Lê arquivos locais e URLs sem depender da extensão ou do `Content-Type`
 
 ## Como Usar
 
@@ -26,6 +27,7 @@ O pacote publicado roda em Node.js 20+ e nao exige Bun no ambiente consumidor.
 
 ```bash
 npx @ygorazambuja/sauron --input swagger.json --angular --http
+npx @ygorazambuja/sauron --input openapi.yaml --http
 
 npm install -g @ygorazambuja/sauron
 sauron --input swagger.json --angular --http
@@ -100,8 +102,8 @@ O comando irá:
 - **`--http`**: Models + métodos HTTP com plugin padrão (`fetch`)
 - **`--angular --http`**: Models + serviço Angular (alias compatível)
 - **`--plugin <id>`**: Seleciona plugin explicitamente (`fetch`, `angular`, `axios`, `mcp`)
-- **`--input arquivo.json`**: Especificar arquivo de entrada
-- **`--url https://...`**: Baixar a especificação via HTTP/HTTPS, com timeout de 30 segundos e limite de 10 MB
+- **`--input arquivo.json|yaml|yml`**: Especificar arquivo JSON ou YAML de entrada
+- **`--url https://...`**: Baixar uma especificação JSON ou YAML via HTTP/HTTPS, com timeout de 30 segundos e limite de 10 MB
 - **`--output diretorio`**: Diretório de saída customizado
 - **`--config arquivo.ts`**: Caminho para arquivo de configuração (padrão: `sauron.config.ts`)
 - **`--short-names` / `-s`**: Usa nomes curtos de tipo, ex: `ProductDto` em vez de `MyAppCoreDTOsProductDto` (padrão: `true`)
@@ -137,13 +139,13 @@ As flags da CLI têm prioridade sobre os valores do arquivo de configuração.
 
 ```typescript
 import {
-  readJsonFile,
+  readOpenApiFile,
   verifySwaggerComposition,
   createModels,
 } from "./src/utils";
 
-// 1. Ler arquivo JSON
-const swaggerData = await readJsonFile("swagger.json");
+// 1. Ler arquivo JSON ou YAML
+const swaggerData = await readOpenApiFile("openapi.yaml");
 
 // 2. Validar schema
 const validatedSchema = verifySwaggerComposition(swaggerData);
@@ -227,15 +229,21 @@ export interface ProductDto {
 
 ## API Reference
 
-### `readJsonFile(filePath: string): Promise<unknown>`
+### `readOpenApiFile(filePath: string): Promise<unknown>`
 
-Lê e faz parse de um arquivo JSON do sistema de arquivos.
+Lê e faz parse de um arquivo OpenAPI/Swagger em JSON ou YAML.
 
 **Parâmetros:**
 
-- `filePath`: Caminho para o arquivo JSON
+- `filePath`: Caminho para o arquivo JSON, YAML ou YML
 
-**Retorna:** Conteúdo JSON parseado
+**Retorna:** Documento parseado
+
+### `fetchOpenApiFromUrl(url: string): Promise<unknown>`
+
+Baixa e faz parse de uma especificação JSON ou YAML via HTTP/HTTPS.
+
+Os aliases legados `readJsonFile` e `fetchJsonFromUrl` continuam disponíveis, mas estão deprecated.
 
 ### `verifySwaggerComposition(swaggerData: Record<string, unknown>)`
 
@@ -243,7 +251,7 @@ Valida dados OpenAPI/Swagger contra o schema esperado.
 
 **Parâmetros:**
 
-- `swaggerData`: Dados brutos do OpenAPI JSON
+- `swaggerData`: Dados brutos do OpenAPI JSON ou YAML já parseados
 
 **Retorna:** Schema validado e tipado
 

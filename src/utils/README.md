@@ -17,15 +17,20 @@ bun test --coverage
 
 ## Estrutura dos Testes
 
-### `readJsonFile`
+### `readOpenApiFile`
 
-Testa a função de leitura de arquivos JSON:
+Testa a função de leitura de arquivos OpenAPI JSON ou YAML:
 
 - ✅ **Leitura de JSON válido**: Verifica se arquivos JSON válidos são lidos e parseados corretamente
+- ✅ **Leitura de YAML válido**: Verifica arquivos `.yaml` e `.yml`
 - ✅ **Arquivo inexistente**: Testa tratamento de erro para arquivos que não existem
-- ✅ **JSON inválido**: Verifica se erros de parsing JSON são tratados adequadamente
+- ✅ **Conteúdo inválido**: Verifica se erros de parsing JSON/YAML são tratados adequadamente
 - ✅ **Caminho vazio**: Valida entrada de parâmetros (caminho vazio)
 - ✅ **Tipo inválido**: Testa validação de tipo do parâmetro (não-string)
+
+### `fetchOpenApiFromUrl`
+
+Testa download e parsing de especificações JSON ou YAML via HTTP/HTTPS, incluindo URLs sem extensão.
 
 ### `verifySwaggerComposition`
 
@@ -91,8 +96,8 @@ Os testes cobrem todos os principais cenários de uso:
 ## Executando Testes Específicos
 
 ```bash
-# Executar apenas testes de readJsonFile
-bun test --grep "readJsonFile"
+# Executar apenas testes de leitura OpenAPI
+bun test --grep "readOpenApiFile"
 
 # Executar apenas testes de validação
 bun test --grep "verifySwaggerComposition"

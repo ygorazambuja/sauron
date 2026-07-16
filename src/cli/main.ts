@@ -4,8 +4,8 @@ import { runPlugins } from "../plugins/runner";
 import type { PluginExecutionResult } from "../plugins/types";
 import {
 	createModelsWithOperationTypes,
-	fetchJsonFromUrl,
-	readJsonFile,
+	fetchOpenApiFromUrl,
+	readOpenApiFile,
 	verifySwaggerComposition,
 } from "../utils";
 import { parseArgs, parseCommand, showHelp } from "./args";
@@ -168,11 +168,11 @@ function writeGeneratedFiles(generatedFiles: Map<string, string>): void {
 async function loadOpenApiConfig(options: CliOptions): Promise<unknown> {
 	if (options.url) {
 		console.log(`📖 Downloading OpenAPI spec from: ${options.url}`);
-		return fetchJsonFromUrl(options.url);
+		return fetchOpenApiFromUrl(options.url);
 	}
 
 	console.log(`📖 Reading OpenAPI spec from: ${options.input}`);
-	return readJsonFile(options.input);
+	return readOpenApiFile(options.input);
 }
 
 /**

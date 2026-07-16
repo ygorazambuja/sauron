@@ -146,8 +146,8 @@ USAGE:
   sauron [COMMAND] [OPTIONS] [INPUT_FILE]
 
 OPTIONS:
-  -i, --input <file>     Input OpenAPI/Swagger JSON file (default: swagger.json)
-  -u, --url <url>        Download OpenAPI/Swagger JSON from URL
+  -i, --input <file>     Input OpenAPI/Swagger JSON or YAML file (default: swagger.json)
+  -u, --url <url>        Download OpenAPI/Swagger JSON or YAML from URL
   -a, --angular          Generate Angular service in src/app/sauron (requires Angular project)
   -t, --http             Generate HTTP client/service methods
   -p, --plugin <id>      Plugin to run (repeatable: fetch, angular, axios, mcp)
@@ -164,6 +164,7 @@ EXAMPLES:
   sauron init
   sauron --config ./sauron.config.ts
   sauron swagger.json
+  sauron openapi.yaml
   sauron --input api.json --angular --http
   sauron --url https://api.example.com/swagger.json --http
   sauron --http -i api.json -o ./generated

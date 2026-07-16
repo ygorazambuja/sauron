@@ -105,6 +105,34 @@ describe("CLI main", () => {
 		).toBe(true);
 	});
 
+	test("should generate files from a YAML OpenAPI document", async () => {
+		writeFileSync(
+			"openapi.yaml",
+			`openapi: 3.0.4
+info:
+  title: YAML API
+  version: 1.0.0
+paths: {}
+components:
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+`,
+		);
+		process.argv = ["node", "index.js", "--input", "openapi.yaml"];
+
+		await main();
+
+		const modelsPath = join("outputs", "models", "index.ts");
+		expect(existsSync(modelsPath)).toBe(true);
+		expect(readFileSync(modelsPath, "utf-8")).toContain(
+			"export interface User",
+		);
+	});
+
 	test("should generate fetch files when using explicit fetch plugin", async () => {
 		const openApiSchema = {
 			openapi: "3.0.4",
