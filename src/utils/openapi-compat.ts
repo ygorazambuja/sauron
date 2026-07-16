@@ -288,7 +288,7 @@ function buildSwaggerParameterSchema(
 	for (const field of schemaFields) {
 		const value = source[field];
 		if (value !== undefined) {
-			schema[field] = value;
+			Object.assign(schema, { [field]: value });
 		}
 	}
 

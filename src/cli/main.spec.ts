@@ -384,7 +384,7 @@ describe("CLI main", () => {
 		const originalFetch = globalThis.fetch;
 		globalThis.fetch = mock(
 			async () => new Response(JSON.stringify(openApiSchema), { status: 200 }),
-		) as typeof fetch;
+		) as unknown as typeof fetch;
 		process.argv = ["node", "index.js", "--config", "sauron.config.ts"];
 
 		try {
@@ -662,5 +662,42 @@ describe("CLI main", () => {
 		}
 
 		expect(errorSpy).toHaveBeenCalledWith("❌ Error:", expect.any(Error));
+	});
+
+	test("should not write generated files when a later plugin fails", async () => {
+		const originalExit = process.exit;
+		process.exit = mock((() => {
+			throw new Error("process_exit_called");
+		}) as (code?: number) => never);
+		writeFileSync(
+			"swagger.json",
+			JSON.stringify({
+				openapi: "3.0.3",
+				info: { title: "Failure API", version: "1.0.0" },
+				paths: {},
+				components: { schemas: {} },
+			}),
+		);
+		process.argv = [
+			"node",
+			"index.js",
+			"--input",
+			"swagger.json",
+			"--plugin",
+			"fetch",
+			"--plugin",
+			"missing",
+		];
+
+		try {
+			await expect(main()).rejects.toThrow("process_exit_called");
+		} finally {
+			process.exit = originalExit;
+		}
+
+		expect(existsSync(join("outputs", "models", "index.ts"))).toBe(false);
+		expect(
+			existsSync(join("outputs", "http-client", "sauron-api.client.ts")),
+		).toBe(false);
 	});
 });

@@ -3,6 +3,7 @@ import {
 	createMissingSwaggerDefinitionsReport,
 	generateMissingSwaggerDefinitionsFile,
 } from "./missing-definitions";
+import { createTypeCoverageReport } from "./type-coverage";
 
 describe("Missing definitions generator", () => {
 	test("should report any-typed query, request, and response definitions", () => {
@@ -211,6 +212,32 @@ describe("Missing definitions generator", () => {
 		expect(report.issues[0]?.reason).toBe(
 			"Success response exists but no response schema was documented in content.",
 		);
+	});
+
+	test("should derive every issue from the shared type coverage analysis", () => {
+		const schema = {
+			openapi: "3.0.3",
+			info: { title: "Shared analysis API", version: "1.0.0" },
+			paths: {
+				"/api/users/{id}": {
+					post: {
+						parameters: [{ in: "query", name: "search" }],
+						requestBody: { content: {} },
+						responses: { "200": { description: "Success" } },
+					},
+				},
+			},
+		} as any;
+
+		const missingDefinitions = createMissingSwaggerDefinitionsReport(schema);
+		const typeCoverage = createTypeCoverageReport(schema);
+
+		expect(
+			missingDefinitions.issues.map(({ recommendedDefinition, ...issue }) => {
+				expect(recommendedDefinition.length).toBeGreaterThan(0);
+				return issue;
+			}),
+		).toEqual(typeCoverage.issues);
 	});
 
 	test("should serialize report to json file content", () => {

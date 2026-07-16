@@ -40,85 +40,139 @@ export async function main() {
 		return;
 	}
 
-	let options = cliOptions;
-
 	try {
-		const loadedConfig = await loadSauronConfig(
-			options.config || DEFAULT_CONFIG_FILE,
-		);
-		if (loadedConfig) {
-			options = mergeOptionsWithConfig(cliOptions, loadedConfig);
-			console.log(
-				`⚙️  Using config file: ${options.config || DEFAULT_CONFIG_FILE}`,
-			);
-		}
-
-		let config: unknown;
-		if (options.url) {
-			console.log(`📖 Downloading OpenAPI spec from: ${options.url}`);
-			config = await fetchJsonFromUrl(options.url);
-		}
-		if (!options.url) {
-			console.log(`📖 Reading OpenAPI spec from: ${options.input}`);
-			config = await readJsonFile(options.input);
-		}
-
-		if (typeof config !== "object") {
-			throw new Error("Config is not an object");
-		}
-
-		console.log("✅ Validating OpenAPI schema...");
-		const schema = verifySwaggerComposition(config as Record<string, unknown>);
-
-		const requestedPluginIds = resolveEffectivePluginIds(options);
-		logPluginCompatibilityNotice(options, requestedPluginIds);
-
-		const angularDetected = isAngularProject();
-		const preferAngularOutput = requestedPluginIds.includes("angular");
-		const baseOutputPath = resolveOutputBasePath(options, preferAngularOutput);
-		const modelsPath = join(baseOutputPath, "models", "index.ts");
-		mkdirSync(dirname(modelsPath), { recursive: true });
-
-		const fileHeader = createGeneratedFileHeader(schema);
-
-		console.log("🔧 Generating TypeScript models...");
-		const { models, operationTypes, typeNameMap } =
-			createModelsWithOperationTypes(schema, {
-				shortNames: options.shortNames,
-			});
-		const formattedModels = await formatGeneratedFile(
-			`${fileHeader}\n${models.join("\n")}`,
-			modelsPath,
-		);
-		writeFileSync(modelsPath, formattedModels);
-
-		const pluginResults = await runPlugins(requestedPluginIds, {
-			schema,
-			options,
-			baseOutputPath,
-			modelsPath,
-			fileHeader,
-			operationTypes,
-			typeNameMap,
-			isAngularProject: angularDetected,
-			writeFormattedFile: async (filePath: string, content: string) => {
-				const formattedContent = await formatGeneratedFile(content, filePath);
-				writeFileSync(filePath, formattedContent);
-			},
-		});
-
-		logPluginReports(pluginResults);
-
-		console.log("\n✅ Generation complete!");
-		console.log(`📄 Models: ${models.length} TypeScript interfaces/types`);
-		logPluginSummary(pluginResults);
-		console.log(
-			`📁 Output: ${resolveOutputDisplayPath(options, angularDetected, preferAngularOutput)}`,
-		);
+		await runGenerateCommand(cliOptions);
 	} catch (error) {
 		console.error("❌ Error:", error);
 		process.exit(1);
 	}
+}
+
+/**
+ * Run generate command.
+ * @param cliOptions Input parameter `cliOptions`.
+ * @returns Run generate command output as `Promise<void>`.
+ * @example
+ * ```ts
+ * const result = await runGenerateCommand({
+ * 	input: "swagger.json",
+ * 	angular: false,
+ * 	http: true,
+ * 	help: false,
+ * 	shortNames: true,
+ * });
+ * // result: void
+ * ```
+ */
+async function runGenerateCommand(cliOptions: CliOptions): Promise<void> {
+	let options = cliOptions;
+
+	const loadedConfig = await loadSauronConfig(
+		options.config || DEFAULT_CONFIG_FILE,
+	);
+	if (loadedConfig) {
+		options = mergeOptionsWithConfig(cliOptions, loadedConfig);
+		console.log(
+			`⚙️  Using config file: ${options.config || DEFAULT_CONFIG_FILE}`,
+		);
+	}
+
+	const config = await loadOpenApiConfig(options);
+
+	if (typeof config !== "object") {
+		throw new Error("Config is not an object");
+	}
+
+	console.log("✅ Validating OpenAPI schema...");
+	const schema = verifySwaggerComposition(config as Record<string, unknown>);
+
+	const requestedPluginIds = resolveEffectivePluginIds(options);
+	logPluginCompatibilityNotice(options, requestedPluginIds);
+
+	const angularDetected = isAngularProject();
+	const preferAngularOutput = requestedPluginIds.includes("angular");
+	const baseOutputPath = resolveOutputBasePath(options, preferAngularOutput);
+	const modelsPath = join(baseOutputPath, "models", "index.ts");
+	const generatedFiles = new Map<string, string>();
+
+	const fileHeader = createGeneratedFileHeader(schema);
+
+	console.log("🔧 Generating TypeScript models...");
+	const { models, operationTypes, typeNameMap } =
+		createModelsWithOperationTypes(schema, {
+			shortNames: options.shortNames,
+		});
+	const formattedModels = await formatGeneratedFile(
+		`${fileHeader}\n${models.join("\n")}`,
+		modelsPath,
+	);
+	generatedFiles.set(modelsPath, formattedModels);
+
+	const pluginResults = await runPlugins(requestedPluginIds, {
+		schema,
+		options,
+		baseOutputPath,
+		modelsPath,
+		fileHeader,
+		operationTypes,
+		typeNameMap,
+		isAngularProject: angularDetected,
+		writeFormattedFile: async (filePath: string, content: string) => {
+			const formattedContent = await formatGeneratedFile(content, filePath);
+			generatedFiles.set(filePath, formattedContent);
+		},
+	});
+	writeGeneratedFiles(generatedFiles);
+
+	logPluginReports(pluginResults);
+
+	console.log("\n✅ Generation complete!");
+	console.log(`📄 Models: ${models.length} TypeScript interfaces/types`);
+	logPluginSummary(pluginResults);
+	console.log(
+		`📁 Output: ${resolveOutputDisplayPath(options, angularDetected, preferAngularOutput)}`,
+	);
+}
+
+/**
+ * Persist generated files only after every generator has completed successfully.
+ * @param generatedFiles Formatted files keyed by their destination path.
+ * @example
+ * ```ts
+ * writeGeneratedFiles(new Map([["outputs/models/index.ts", "export {};\n"]]));
+ * ```
+ */
+function writeGeneratedFiles(generatedFiles: Map<string, string>): void {
+	for (const [filePath, content] of generatedFiles) {
+		mkdirSync(dirname(filePath), { recursive: true });
+		writeFileSync(filePath, content);
+	}
+}
+
+/**
+ * Load OpenAPI config.
+ * @param options Input parameter `options`.
+ * @returns Load OpenAPI config output as `Promise<unknown>`.
+ * @example
+ * ```ts
+ * const result = await loadOpenApiConfig({
+ * 	input: "swagger.json",
+ * 	angular: false,
+ * 	http: false,
+ * 	help: false,
+ * 	shortNames: true,
+ * });
+ * // result: unknown
+ * ```
+ */
+async function loadOpenApiConfig(options: CliOptions): Promise<unknown> {
+	if (options.url) {
+		console.log(`📖 Downloading OpenAPI spec from: ${options.url}`);
+		return fetchJsonFromUrl(options.url);
+	}
+
+	console.log(`📖 Reading OpenAPI spec from: ${options.input}`);
+	return readJsonFile(options.input);
 }
 
 /**

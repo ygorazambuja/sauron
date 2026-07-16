@@ -39,6 +39,9 @@ import {
 	hasSuccessResponseBinarySchema,
 } from "./openapi-compat";
 
+const OPENAPI_FETCH_TIMEOUT_MS = 30_000;
+const MAX_OPENAPI_RESPONSE_BYTES = 10 * 1024 * 1024;
+
 /**
  * Represents an OpenAPI path operation (GET, POST, PUT, DELETE)
  */
@@ -143,15 +146,83 @@ export async function fetchJsonFromUrl(url: string): Promise<unknown> {
 	}
 
 	try {
-		const response = await fetch(url);
+		const parsedUrl = new URL(url);
+		if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+			throw new Error("URL protocol must be HTTP or HTTPS");
+		}
+
+		const response = await fetch(parsedUrl, {
+			signal: AbortSignal.timeout(OPENAPI_FETCH_TIMEOUT_MS),
+		});
 		if (!response.ok) {
 			throw new Error(`HTTP error! status: ${response.status}`);
 		}
-		const content = await response.text();
+		const content = await readLimitedResponseText(response);
 		return JSON.parse(content);
 	} catch (error) {
 		throw new Error(`Failed to fetch or parse JSON from "${url}": ${error}`);
 	}
+}
+
+/**
+ * Read a response body while enforcing the OpenAPI document size limit.
+ * @param response HTTP response containing an OpenAPI document.
+ * @returns Response body decoded as UTF-8 text.
+ * @example
+ * ```ts
+ * const content = await readLimitedResponseText(new Response("{}"));
+ * // content: "{}"
+ * ```
+ */
+async function readLimitedResponseText(response: Response): Promise<string> {
+	const declaredSize = Number(response.headers.get("content-length"));
+	if (declaredSize > MAX_OPENAPI_RESPONSE_BYTES) {
+		throw createResponseSizeError();
+	}
+
+	if (!response.body) {
+		return "";
+	}
+
+	const reader = response.body.getReader();
+	const chunks: Uint8Array[] = [];
+	let receivedBytes = 0;
+
+	while (true) {
+		const { done, value } = await reader.read();
+		if (done) {
+			break;
+		}
+
+		receivedBytes += value.byteLength;
+		if (receivedBytes > MAX_OPENAPI_RESPONSE_BYTES) {
+			await reader.cancel();
+			throw createResponseSizeError();
+		}
+		chunks.push(value);
+	}
+
+	const content = new Uint8Array(receivedBytes);
+	let offset = 0;
+	for (const chunk of chunks) {
+		content.set(chunk, offset);
+		offset += chunk.byteLength;
+	}
+
+	return new TextDecoder().decode(content);
+}
+
+/**
+ * Create the error used when a remote OpenAPI document exceeds the size limit.
+ * @returns Error describing the configured response limit.
+ * @example
+ * ```ts
+ * const error = createResponseSizeError();
+ * // error.message: "OpenAPI response exceeds the 10 MB limit"
+ * ```
+ */
+function createResponseSizeError(): Error {
+	return new Error("OpenAPI response exceeds the 10 MB limit");
 }
 
 /**

@@ -2,7 +2,7 @@
  * Test suite for OpenAPI to TypeScript converter utilities
  */
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,6 +11,7 @@ import {
 	createAngularHttpClientMethods,
 	createModels,
 	createModelsWithOperationTypes,
+	fetchJsonFromUrl,
 	readJsonFile,
 	verifySwaggerComposition,
 } from "./index";
@@ -25,6 +26,48 @@ describe("OpenAPI to TypeScript Converter Utilities", () => {
 
 	afterEach(() => {
 		rmSync(tempDir, { recursive: true, force: true });
+	});
+
+	describe("fetchJsonFromUrl", () => {
+		const originalFetch = globalThis.fetch;
+
+		afterEach(() => {
+			globalThis.fetch = originalFetch;
+		});
+
+		test("should fetch and parse JSON over HTTPS", async () => {
+			globalThis.fetch = mock(
+				async () => new Response(JSON.stringify({ openapi: "3.0.0" })),
+			) as unknown as typeof fetch;
+
+			await expect(
+				fetchJsonFromUrl("https://example.com/openapi.json"),
+			).resolves.toEqual({ openapi: "3.0.0" });
+		});
+
+		test("should reject non-HTTP protocols without fetching", async () => {
+			globalThis.fetch = mock(
+				async () => new Response("{}"),
+			) as unknown as typeof fetch;
+
+			await expect(
+				fetchJsonFromUrl("file:///tmp/openapi.json"),
+			).rejects.toThrow("URL protocol must be HTTP or HTTPS");
+			expect(globalThis.fetch).not.toHaveBeenCalled();
+		});
+
+		test("should reject responses larger than 10 MB", async () => {
+			globalThis.fetch = mock(
+				async () =>
+					new Response("{}", {
+						headers: { "content-length": String(10 * 1024 * 1024 + 1) },
+					}),
+			) as unknown as typeof fetch;
+
+			await expect(
+				fetchJsonFromUrl("https://example.com/openapi.json"),
+			).rejects.toThrow("OpenAPI response exceeds the 10 MB limit");
+		});
 	});
 
 	describe("readJsonFile", () => {

@@ -70,6 +70,15 @@ bun test --watch
 
 # Executar com cobertura
 bun test --coverage
+
+# Verificar tipos sem gerar arquivos
+bun run typecheck
+
+# Validar lint e formatação
+bunx biome check .
+
+# Gerar o bundle Node.js
+bun run build
 ```
 
 O comando irá:
@@ -92,6 +101,7 @@ O comando irá:
 - **`--angular --http`**: Models + serviço Angular (alias compatível)
 - **`--plugin <id>`**: Seleciona plugin explicitamente (`fetch`, `angular`, `axios`, `mcp`)
 - **`--input arquivo.json`**: Especificar arquivo de entrada
+- **`--url https://...`**: Baixar a especificação via HTTP/HTTPS, com timeout de 30 segundos e limite de 10 MB
 - **`--output diretorio`**: Diretório de saída customizado
 - **`--config arquivo.ts`**: Caminho para arquivo de configuração (padrão: `sauron.config.ts`)
 - **`--short-names` / `-s`**: Usa nomes curtos de tipo, ex: `ProductDto` em vez de `MyAppCoreDTOsProductDto` (padrão: `true`)
@@ -329,6 +339,10 @@ const models = createModels(schema, { shortNames: false });
 
 ```bash
 bun test
+bun test --coverage
+bun run typecheck
+bunx biome check .
+bun run build
 ```
 
 ### Modificar Schemas

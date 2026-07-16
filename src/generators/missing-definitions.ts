@@ -1,32 +1,16 @@
 import type { z } from "zod";
 import type { SwaggerOrOpenAPISchema } from "../schemas/swagger";
-import type {
-	OpenApiOperation,
-	OpenApiPath,
-	OperationTypeInfo,
-	OperationTypeMap,
-} from "../utils";
+import type { OperationTypeMap } from "../utils";
 import {
-	getOperationRequestSchema,
-	getParameterSchema,
-	getResponseSchema,
-	getSuccessResponse,
-	hasOperationRequestBody,
-} from "../utils/openapi-compat";
+	createTypeCoverageReport,
+	type TypeCoverageIssue,
+	type TypeCoverageLocation,
+} from "./type-coverage";
 
 /**
  * Missing Swagger definition issue.
  */
-export type MissingSwaggerDefinitionIssue = {
-	path: string;
-	method: string;
-	location:
-		| "path.parameter"
-		| "query.parameter"
-		| "request.body"
-		| "response.body";
-	field?: string;
-	reason: string;
+export type MissingSwaggerDefinitionIssue = TypeCoverageIssue & {
 	recommendedDefinition: string;
 };
 
@@ -60,11 +44,18 @@ export function createMissingSwaggerDefinitionsReport(
 	data: z.infer<typeof SwaggerOrOpenAPISchema>,
 	operationTypes?: OperationTypeMap,
 ): MissingSwaggerDefinitionsReport {
-	const issues = collectMissingSwaggerDefinitionIssues(data, operationTypes);
+	const coverageReport = createTypeCoverageReport(data, operationTypes);
+	const issues = coverageReport.issues.map(addRecommendedDefinition);
+
 	return {
-		generatedAt: new Date().toISOString(),
+		generatedAt: coverageReport.generatedAt,
 		totalIssues: issues.length,
-		summary: buildSummary(issues),
+		summary: {
+			pathParameters: coverageReport.summary.pathParameters.untyped,
+			queryParameters: coverageReport.summary.queryParameters.untyped,
+			requestBodies: coverageReport.summary.requestBodies.untyped,
+			responseBodies: coverageReport.summary.responseBodies.untyped,
+		},
 		issues,
 	};
 }
@@ -86,651 +77,92 @@ export function generateMissingSwaggerDefinitionsFile(
 }
 
 /**
- * Collect missing Swagger definition issues.
- * @param data Input parameter `data`.
- * @param operationTypes Input parameter `operationTypes`.
- * @returns Collect missing Swagger definition issues output as `MissingSwaggerDefinitionIssue[]`.
+ * Add the remediation guidance associated with a type coverage issue.
+ * @param issue Type coverage issue to enrich.
+ * @returns Missing definition issue with remediation guidance.
  * @example
  * ```ts
- * const result = collectMissingSwaggerDefinitionIssues({ paths: {} } as never, {});
- * // result: MissingSwaggerDefinitionIssue[]
+ * const issue = addRecommendedDefinition({ path: "/users/{id}", method: "GET", location: "path.parameter", reason: "Path parameter is missing from operation.parameters." });
+ * // issue.recommendedDefinition: "Add a path parameter definition with schema.type or schema.$ref."
  * ```
  */
-function collectMissingSwaggerDefinitionIssues(
-	data: z.infer<typeof SwaggerOrOpenAPISchema>,
-	operationTypes?: OperationTypeMap,
-): MissingSwaggerDefinitionIssue[] {
-	if (!data.paths) {
-		return [];
-	}
-
-	const issues: MissingSwaggerDefinitionIssue[] = [];
-	const httpMethods = [
-		"get",
-		"post",
-		"put",
-		"delete",
-		"patch",
-		"head",
-		"options",
-	] as const;
-
-	for (const [path, pathItem] of Object.entries(data.paths)) {
-		for (const httpMethod of httpMethods) {
-			const operation = (pathItem as OpenApiPath)[httpMethod];
-			if (!operation) {
-				continue;
-			}
-
-			const typeInfo = operationTypes?.[path]?.[httpMethod];
-			const operationIssues = collectOperationIssues(
-				path,
-				httpMethod,
-				operation,
-				typeInfo,
-			);
-			issues.push(...operationIssues);
-		}
-	}
-
-	return issues;
-}
-
-/**
- * Collect operation issues.
- * @param path Input parameter `path`.
- * @param httpMethod Input parameter `httpMethod`.
- * @param operation Input parameter `operation`.
- * @param typeInfo Input parameter `typeInfo`.
- * @returns Collect operation issues output as `MissingSwaggerDefinitionIssue[]`.
- * @example
- * ```ts
- * const result = collectOperationIssues("/users", "get", {}, undefined);
- * // result: MissingSwaggerDefinitionIssue[]
- * ```
- */
-function collectOperationIssues(
-	path: string,
-	httpMethod: string,
-	operation: OpenApiOperation,
-	typeInfo?: OperationTypeInfo,
-): MissingSwaggerDefinitionIssue[] {
-	const issues: MissingSwaggerDefinitionIssue[] = [];
-
-	const parameterIssues = collectParameterIssues(path, httpMethod, operation);
-	issues.push(...parameterIssues);
-
-	const requestIssue = collectRequestBodyIssue(
-		path,
-		httpMethod,
-		operation,
-		typeInfo,
-	);
-	if (requestIssue) {
-		issues.push(requestIssue);
-	}
-
-	const responseIssue = collectResponseBodyIssue(
-		path,
-		httpMethod,
-		operation,
-		typeInfo,
-	);
-	if (responseIssue) {
-		issues.push(responseIssue);
-	}
-
-	return issues;
-}
-
-/**
- * Collect parameter issues.
- * @param path Input parameter `path`.
- * @param httpMethod Input parameter `httpMethod`.
- * @param operation Input parameter `operation`.
- * @returns Collect parameter issues output as `MissingSwaggerDefinitionIssue[]`.
- * @example
- * ```ts
- * const result = collectParameterIssues("/users/{id}", "get", {});
- * // result: MissingSwaggerDefinitionIssue[]
- * ```
- */
-function collectParameterIssues(
-	path: string,
-	httpMethod: string,
-	operation: OpenApiOperation,
-): MissingSwaggerDefinitionIssue[] {
-	const issues: MissingSwaggerDefinitionIssue[] = [];
-	const parameters = Array.isArray(operation.parameters)
-		? operation.parameters
-		: [];
-
-	const pathPlaceholders = getPathPlaceholders(path);
-	for (const placeholder of pathPlaceholders) {
-		const pathParameter = parameters.find(
-			(parameter) => parameter.in === "path" && parameter.name === placeholder,
-		);
-
-		if (!pathParameter) {
-			issues.push({
-				path,
-				method: httpMethod.toUpperCase(),
-				location: "path.parameter",
-				field: placeholder,
-				reason: "Path parameter is missing from operation.parameters.",
-				recommendedDefinition:
-					"Add a path parameter definition with schema.type or schema.$ref.",
-			});
-			continue;
-		}
-
-		if (!isSchemaAny(getParameterSchema(pathParameter))) {
-			continue;
-		}
-
-		issues.push({
-			path,
-			method: httpMethod.toUpperCase(),
-			location: "path.parameter",
-			field: placeholder,
-			reason: "Path parameter schema is missing or unresolved.",
-			recommendedDefinition:
-				"Define parameter.schema with a primitive type, enum, object, array, or valid $ref.",
-		});
-	}
-
-	for (const parameter of parameters) {
-		if (parameter.in !== "query") {
-			continue;
-		}
-
-		if (!isSchemaAny(getParameterSchema(parameter))) {
-			continue;
-		}
-
-		issues.push({
-			path,
-			method: httpMethod.toUpperCase(),
-			location: "query.parameter",
-			field: parameter.name,
-			reason: "Query parameter schema is missing or unresolved.",
-			recommendedDefinition:
-				"Define query parameter schema.type, schema.enum, schema.items, anyOf/oneOf/allOf, or schema.$ref.",
-		});
-	}
-
-	return issues;
-}
-
-/**
- * Collect request body issue.
- * @param path Input parameter `path`.
- * @param httpMethod Input parameter `httpMethod`.
- * @param operation Input parameter `operation`.
- * @param typeInfo Input parameter `typeInfo`.
- * @returns Collect request body issue output as `MissingSwaggerDefinitionIssue | undefined`.
- * @example
- * ```ts
- * const result = collectRequestBodyIssue("/users", "post", {}, undefined);
- * // result: MissingSwaggerDefinitionIssue | undefined
- * ```
- */
-function collectRequestBodyIssue(
-	path: string,
-	httpMethod: string,
-	operation: OpenApiOperation,
-	typeInfo?: OperationTypeInfo,
-): MissingSwaggerDefinitionIssue | undefined {
-	if (!hasOperationRequestBody(operation)) {
-		return undefined;
-	}
-
-	const requestType =
-		typeInfo?.requestType ?? extractRequestType(operation) ?? "any";
-	if (!containsAnyType(requestType)) {
-		return undefined;
-	}
-
-	const schema = getOperationRequestSchema(operation);
-	if (!schema) {
-		return {
-			path,
-			method: httpMethod.toUpperCase(),
-			location: "request.body",
-			reason: "Request body exists but no schema was documented in content.",
-			recommendedDefinition:
-				"Add requestBody.content['application/json'].schema with type/object/array or $ref.",
-		};
-	}
-
+function addRecommendedDefinition(
+	issue: TypeCoverageIssue,
+): MissingSwaggerDefinitionIssue {
 	return {
-		path,
-		method: httpMethod.toUpperCase(),
-		location: "request.body",
-		reason:
-			"Request body schema could not be resolved to a concrete model type.",
-		recommendedDefinition:
-			"Reference a schema with $ref or define a complete inline schema in requestBody.content.",
+		...issue,
+		recommendedDefinition: resolveRecommendedDefinition(issue),
 	};
 }
 
 /**
- * Collect response body issue.
- * @param path Input parameter `path`.
- * @param httpMethod Input parameter `httpMethod`.
- * @param operation Input parameter `operation`.
- * @param typeInfo Input parameter `typeInfo`.
- * @returns Collect response body issue output as `MissingSwaggerDefinitionIssue | undefined`.
+ * Resolve remediation guidance for a type coverage issue.
+ * @param issue Type coverage issue to inspect.
+ * @returns Recommended OpenAPI definition change.
  * @example
  * ```ts
- * const result = collectResponseBodyIssue("/users", "get", {}, undefined);
- * // result: MissingSwaggerDefinitionIssue | undefined
+ * const recommendation = resolveRecommendedDefinition({ path: "/users", method: "GET", location: "query.parameter", reason: "Query parameter schema is missing or unresolved." });
+ * // recommendation: "Define query parameter schema.type, schema.enum, schema.items, anyOf/oneOf/allOf, or schema.$ref."
  * ```
  */
-function collectResponseBodyIssue(
-	path: string,
-	httpMethod: string,
-	operation: OpenApiOperation,
-	typeInfo?: OperationTypeInfo,
-): MissingSwaggerDefinitionIssue | undefined {
-	const hasNoContentStatus = Object.keys(operation.responses ?? {}).some(
-		(status) => status === "204" || status === "205",
-	);
-	if (httpMethod === "delete" || hasNoContentStatus) {
-		return undefined;
+function resolveRecommendedDefinition(issue: TypeCoverageIssue): string {
+	if (issue.reason === "Path parameter is missing from operation.parameters.") {
+		return "Add a path parameter definition with schema.type or schema.$ref.";
 	}
 
-	const requestType =
-		typeInfo?.requestType ?? extractRequestType(operation) ?? "any";
-	let responseType = typeInfo?.responseType ?? extractResponseType(operation);
-	if (!responseType) {
-		responseType = "any";
-	}
+	const recommendations: Record<TypeCoverageLocation, string> = {
+		"path.parameter":
+			"Define parameter.schema with a primitive type, enum, object, array, or valid $ref.",
+		"query.parameter":
+			"Define query parameter schema.type, schema.enum, schema.items, anyOf/oneOf/allOf, or schema.$ref.",
+		"request.body": resolveRequestBodyRecommendation(issue.reason),
+		"response.body": resolveResponseBodyRecommendation(issue.reason),
+	};
 
-	const isMutatingMethod = ["post", "put", "patch"].includes(httpMethod);
+	return recommendations[issue.location];
+}
+
+/**
+ * Resolve request body remediation guidance.
+ * @param reason Reason reported by the shared type analysis.
+ * @returns Recommended request body definition change.
+ * @example
+ * ```ts
+ * const recommendation = resolveRequestBodyRecommendation("Request body exists but no schema was documented in content.");
+ * // recommendation: "Add requestBody.content['application/json'].schema with type/object/array or $ref."
+ * ```
+ */
+function resolveRequestBodyRecommendation(reason: string): string {
 	if (
-		containsAnyType(responseType) &&
-		isMutatingMethod &&
-		!containsAnyType(requestType)
+		reason === "Request body exists but no schema was documented in content."
 	) {
-		responseType = requestType;
+		return "Add requestBody.content['application/json'].schema with type/object/array or $ref.";
 	}
 
-	if (!containsAnyType(responseType)) {
-		return undefined;
-	}
-
-	const successResponse = getSuccessResponse(operation);
-	if (!successResponse) {
-		return {
-			path,
-			method: httpMethod.toUpperCase(),
-			location: "response.body",
-			reason: "No 2xx success response is documented for this operation.",
-			recommendedDefinition:
-				"Add a 200/201 (or any 2xx) response with content schema for the HTTP client return type.",
-		};
-	}
-
-	const schema = getResponseSchema(successResponse);
-	if (!schema) {
-		return {
-			path,
-			method: httpMethod.toUpperCase(),
-			location: "response.body",
-			reason:
-				"Success response exists but no response schema was documented in content.",
-			recommendedDefinition:
-				"Add response.content['application/json'].schema using $ref or a fully defined inline schema.",
-		};
-	}
-
-	return {
-		path,
-		method: httpMethod.toUpperCase(),
-		location: "response.body",
-		reason: "Response schema could not be resolved to a concrete model type.",
-		recommendedDefinition:
-			"Use $ref to a schema in components.schemas/definitions or define response schema details explicitly.",
-	};
+	return "Reference a schema with $ref or define a complete inline schema in requestBody.content.";
 }
 
 /**
- * Build summary.
- * @param issues Input parameter `issues`.
- * @returns Build summary output as `MissingSwaggerDefinitionsReport["summary"]`.
+ * Resolve response body remediation guidance.
+ * @param reason Reason reported by the shared type analysis.
+ * @returns Recommended response body definition change.
  * @example
  * ```ts
- * const result = buildSummary([]);
- * // result: MissingSwaggerDefinitionsReport["summary"]
+ * const recommendation = resolveResponseBodyRecommendation("No 2xx success response is documented for this operation.");
+ * // recommendation: "Add a 200/201 (or any 2xx) response with content schema for the HTTP client return type."
  * ```
  */
-function buildSummary(
-	issues: MissingSwaggerDefinitionIssue[],
-): MissingSwaggerDefinitionsReport["summary"] {
-	const summary = {
-		pathParameters: 0,
-		queryParameters: 0,
-		requestBodies: 0,
-		responseBodies: 0,
-	};
-
-	for (const issue of issues) {
-		if (issue.location === "path.parameter") {
-			summary.pathParameters += 1;
-			continue;
-		}
-
-		if (issue.location === "query.parameter") {
-			summary.queryParameters += 1;
-			continue;
-		}
-
-		if (issue.location === "request.body") {
-			summary.requestBodies += 1;
-			continue;
-		}
-
-		summary.responseBodies += 1;
+function resolveResponseBodyRecommendation(reason: string): string {
+	if (reason === "No 2xx success response is documented for this operation.") {
+		return "Add a 200/201 (or any 2xx) response with content schema for the HTTP client return type.";
 	}
 
-	return summary;
-}
-
-/**
- * Get path placeholders.
- * @param path Input parameter `path`.
- * @returns Get path placeholders output as `string[]`.
- * @example
- * ```ts
- * const result = getPathPlaceholders("/users/{id}");
- * // result: string[]
- * ```
- */
-function getPathPlaceholders(path: string): string[] {
-	const matches = path.match(/\{([^}]+)\}/g);
-	if (!matches) {
-		return [];
+	if (
+		reason ===
+		"Success response exists but no response schema was documented in content."
+	) {
+		return "Add response.content['application/json'].schema using $ref or a fully defined inline schema.";
 	}
 
-	return matches.map((match) => match.slice(1, -1));
-}
-
-/**
- * Extract request type.
- * @param operation Input parameter `operation`.
- * @returns Extract request type output as `string | undefined`.
- * @example
- * ```ts
- * const result = extractRequestType({});
- * // result: string | undefined
- * ```
- */
-function extractRequestType(operation: OpenApiOperation): string | undefined {
-	const schema = getOperationRequestSchema(operation);
-	if (!schema) {
-		return undefined;
-	}
-
-	const schemaRef = getSchemaRef(schema);
-	if (schemaRef) {
-		return schemaRef;
-	}
-
-	const schemaType = schema.type;
-	if (schemaType !== "array") {
-		return undefined;
-	}
-
-	const items = schema.items;
-	if (!items || typeof items !== "object") {
-		return undefined;
-	}
-
-	const itemRef = getSchemaRef(items as Record<string, unknown>);
-	if (!itemRef) {
-		return undefined;
-	}
-
-	return `${itemRef}[]`;
-}
-
-/**
- * Extract response type.
- * @param operation Input parameter `operation`.
- * @returns Extract response type output as `string`.
- * @example
- * ```ts
- * const result = extractResponseType({});
- * // result: string
- * ```
- */
-function extractResponseType(operation: OpenApiOperation): string {
-	const response = getSuccessResponse(operation);
-	if (!response) {
-		return "any";
-	}
-
-	const schema = getResponseSchema(response);
-	if (!schema) {
-		return "any";
-	}
-
-	const schemaRef = getSchemaRef(schema);
-	if (schemaRef) {
-		return schemaRef;
-	}
-
-	const schemaType = schema.type;
-	if (schemaType !== "array") {
-		return "any";
-	}
-
-	const items = schema.items;
-	if (!items || typeof items !== "object") {
-		return "any";
-	}
-
-	const itemRef = getSchemaRef(items as Record<string, unknown>);
-	if (!itemRef) {
-		return "any[]";
-	}
-
-	return `${itemRef}[]`;
-}
-
-/**
- * Get schema reference name.
- * @param schema Input parameter `schema`.
- * @returns Get schema reference name output as `string | undefined`.
- * @example
- * ```ts
- * const result = getSchemaRef({ $ref: "#/components/schemas/User" });
- * // result: string | undefined
- * ```
- */
-function getSchemaRef(schema: Record<string, unknown>): string | undefined {
-	const schemaReference = schema.$ref;
-	if (typeof schemaReference !== "string") {
-		return undefined;
-	}
-
-	const referencePathParts = schemaReference.split("/");
-	const referenceName = referencePathParts[referencePathParts.length - 1];
-	if (!referenceName) {
-		return undefined;
-	}
-
-	return referenceName;
-}
-
-/**
- * Check if schema resolves to any.
- * @param schema Input parameter `schema`.
- * @returns Check if schema resolves to any output as `boolean`.
- * @example
- * ```ts
- * const result = isSchemaAny(undefined);
- * // result: boolean
- * ```
- */
-function isSchemaAny(schema: unknown): boolean {
-	const resolvedType = resolveSchemaType(schema);
-	return containsAnyType(resolvedType);
-}
-
-/**
- * Resolve schema type.
- * @param schema Input parameter `schema`.
- * @returns Resolve schema type output as `string`.
- * @example
- * ```ts
- * const result = resolveSchemaType({ type: "string" });
- * // result: string
- * ```
- */
-function resolveSchemaType(schema: unknown): string {
-	if (!schema || typeof schema !== "object") {
-		return "any";
-	}
-
-	const typedSchema = schema as Record<string, unknown>;
-	const schemaRef = getSchemaRef(typedSchema);
-	if (schemaRef) {
-		return schemaRef;
-	}
-
-	const schemaEnum = typedSchema.enum;
-	if (Array.isArray(schemaEnum)) {
-		const union = schemaEnum
-			.map((enumValue) =>
-				typeof enumValue === "string" ? `"${enumValue}"` : String(enumValue),
-			)
-			.join(" | ");
-		if (!union) {
-			return "any";
-		}
-		return union;
-	}
-
-	const anyOfType = resolveUnionType(typedSchema.anyOf);
-	if (anyOfType) {
-		return anyOfType;
-	}
-
-	const oneOfType = resolveUnionType(typedSchema.oneOf);
-	if (oneOfType) {
-		return oneOfType;
-	}
-
-	const allOfType = resolveIntersectionType(typedSchema.allOf);
-	if (allOfType) {
-		return allOfType;
-	}
-
-	const schemaType = typedSchema.type;
-	if (schemaType === "array") {
-		const itemType = resolveSchemaType(typedSchema.items);
-		return `${itemType}[]`;
-	}
-
-	if (schemaType === "object" && typedSchema.properties) {
-		return "object";
-	}
-
-	if (schemaType === "string") {
-		const format = typedSchema.format;
-		if (format === "numeric") {
-			return "number";
-		}
-		return "string";
-	}
-
-	if (schemaType === "number") {
-		return "number";
-	}
-
-	if (schemaType === "integer") {
-		return "number";
-	}
-
-	if (schemaType === "boolean") {
-		return "boolean";
-	}
-
-	return "any";
-}
-
-/**
- * Resolve union type.
- * @param schemaVariants Input parameter `schemaVariants`.
- * @returns Resolve union type output as `string | undefined`.
- * @example
- * ```ts
- * const result = resolveUnionType([{ type: "string" }]);
- * // result: string | undefined
- * ```
- */
-function resolveUnionType(schemaVariants: unknown): string | undefined {
-	if (!Array.isArray(schemaVariants)) {
-		return undefined;
-	}
-
-	const variants = schemaVariants
-		.map((variant) => resolveSchemaType(variant))
-		.filter(Boolean);
-	if (variants.length === 0) {
-		return undefined;
-	}
-
-	return variants.join(" | ");
-}
-
-/**
- * Resolve intersection type.
- * @param schemaVariants Input parameter `schemaVariants`.
- * @returns Resolve intersection type output as `string | undefined`.
- * @example
- * ```ts
- * const result = resolveIntersectionType([{ type: "string" }]);
- * // result: string | undefined
- * ```
- */
-function resolveIntersectionType(schemaVariants: unknown): string | undefined {
-	if (!Array.isArray(schemaVariants)) {
-		return undefined;
-	}
-
-	const variants = schemaVariants
-		.map((variant) => resolveSchemaType(variant))
-		.filter(Boolean);
-	if (variants.length === 0) {
-		return undefined;
-	}
-
-	return variants.join(" & ");
-}
-
-/**
- * Check if type includes any.
- * @param typeName Input parameter `typeName`.
- * @returns Check if type includes any output as `boolean`.
- * @example
- * ```ts
- * const result = containsAnyType("any[]");
- * // result: boolean
- * ```
- */
-function containsAnyType(typeName: string): boolean {
-	const normalized = typeName.trim();
-	if (normalized === "any") {
-		return true;
-	}
-
-	if (normalized === "any[]") {
-		return true;
-	}
-
-	const tokens = normalized.split(/[|&]/).map((token) => token.trim());
-	return tokens.some((token) => token === "any" || token === "any[]");
+	return "Use $ref to a schema in components.schemas/definitions or define response schema details explicitly.";
 }
